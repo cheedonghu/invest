@@ -9,5 +9,5 @@ services:
     environment:
       STOCK_DB_CONFIG_MOUNT_PATH: /config/config.toml
     volumes:
-      - ./config/config.toml:/config/config.toml:ro
+      - ./config:/config
     restart: unless-stopped
