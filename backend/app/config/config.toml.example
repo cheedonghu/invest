@@ -1,0 +1,17 @@
+[database]
+host = "127.0.0.1"
+port = 3306
+user = "root"
+password = "your-password"
+database = "invest"
+charset = "utf8mb4"
+
+[pool]
+min_cached = 1
+max_cached = 5
+max_shared = 5
+max_connections = 10
+blocking = true
+max_usage = 0
+ping = 1
+set_session = []

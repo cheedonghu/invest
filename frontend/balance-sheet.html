@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>&#32929;&#31080;&#36164;&#20135;&#36127;&#20538;&#34920;</title>
+    <link rel="stylesheet" href="/assets/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <nav class="top-nav">
+        <a class="nav-link" href="/">PE &#20998;&#26512;</a>
+        <a class="nav-link active" href="/balance-sheet">&#36164;&#20135;&#36127;&#20538;&#34920;</a>
+        <a class="nav-link" href="/valuation">&#36164;&#20135;&#20272;&#20540;</a>
+      </nav>
+
+      <section class="hero-card">
+        <div>
+          <p class="eyebrow">Quarterly Balance Sheet</p>
+          <h1>&#32929;&#31080;&#36164;&#20135;&#36127;&#20538;&#34920;&#21487;&#35270;&#21270;</h1>
+          <p class="hero-copy">
+            &#36755;&#20837;&#20219;&#24847; 6 &#20301; A &#32929;&#20195;&#30721;&#65292;&#33719;&#21462;&#23395;&#24230;&#36164;&#20135;&#36127;&#20538;&#34920;&#65292;&#24182;&#25353;&#22266;&#23450;&#20998;&#31867;&#24402;&#24182;&#20026;&#36164;&#20135;&#19982;&#36127;&#20538;&#26609;&#29366;&#22270;&#12290;
+            &#22270;&#20013;&#26410;&#21333;&#29420;&#23637;&#31034;&#30340;&#31185;&#30446;&#20250;&#33258;&#21160;&#24402;&#20837;&#20854;&#20182;&#27969;&#21160;&#25110;&#20854;&#20182;&#38750;&#27969;&#21160;&#39033;&#12290;
+          </p>
+        </div>
+        <div class="stat-grid">
+          <article class="stat-card">
+            <span>&#24403;&#21069;&#32929;&#31080;</span>
+            <strong id="balance-stock-name">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>&#24403;&#21069;&#23395;&#24230;</span>
+            <strong id="balance-report-date">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>&#36164;&#20135;&#21512;&#35745;</span>
+            <strong id="balance-assets-total">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>&#36127;&#20538;&#21512;&#35745;</span>
+            <strong id="balance-liabilities-total">-</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <div class="panel-header panel-controls">
+          <div>
+            <h2 id="balance-chart-title">&#36164;&#20135;&#36127;&#20538;&#34920;</h2>
+            <p>&#20197;&#20159;&#20803;&#20026;&#21333;&#20301;&#23637;&#31034;&#23395;&#24230;&#36164;&#20135;&#36127;&#20538;&#32467;&#26500;&#12290;</p>
+          </div>
+          <form id="balance-form" class="stock-form">
+            <label class="stock-input-group" for="balance-symbol">
+              <span>&#32929;&#31080;&#20195;&#30721;</span>
+              <input id="balance-symbol" name="symbol" type="text" inputmode="numeric" maxlength="6" placeholder="&#20363;&#22914; 600519" value="600519" />
+            </label>
+            <label class="stock-input-group" for="balance-years">
+              <span>&#36817;&#20960;&#24180;</span>
+              <input id="balance-years" name="years" type="text" inputmode="numeric" maxlength="2" placeholder="&#20363;&#22914; 3" value="3" />
+            </label>
+            <button id="balance-submit-btn" type="submit">&#26597;&#35810;&#25968;&#25454;</button>
+          </form>
+        </div>
+
+        <div class="period-toolbar">
+          <button id="prev-period-btn" type="button">&#19978;&#19968;&#23395;</button>
+          <button id="current-period-btn" type="button">&#26368;&#26032;&#25968;&#25454;</button>
+          <button id="next-period-btn" type="button">&#19979;&#19968;&#23395;</button>
+        </div>
+
+        <div id="balance-chart" class="chart"></div>
+      </section>
+    </main>
+
+    <script src="/assets/balance-sheet.js"></script>
+  </body>
+</html>

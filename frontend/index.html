@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>&#24120;&#29992;&#20272;&#20540;&#25351;&#26631;&#23637;&#31034;</title>
+    <link rel="stylesheet" href="/assets/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <nav class="top-nav">
+        <a class="nav-link active" href="/">PE &#20998;&#26512;</a>
+        <a class="nav-link" href="/balance-sheet">&#36164;&#20135;&#36127;&#20538;&#34920;</a>
+        <a class="nav-link" href="/valuation">&#36164;&#20135;&#20272;&#20540;</a>
+      </nav>
+
+      <section class="hero-card">
+        <div>
+          <p class="eyebrow">AKShare + Python + ECharts</p>
+          <h1>&#24120;&#29992; PE / PB / &#24066;&#38144;&#29575;&#36208;&#21183;&#23637;&#31034;</h1>
+          <p class="hero-copy">
+            &#36755;&#20837;&#20219;&#24847; 6 &#20301; A &#32929;&#20195;&#30721;&#65292;&#25509;&#21475;&#25389;&#21462;&#36817; 10 &#24180;&#20272;&#20540;&#25351;&#26631;&#65292;&#20998;&#21035;&#23637;&#31034; PE(TTM)&#12289;&#24066;&#20928;&#29575;&#21644;&#24066;&#38144;&#29575;&#30340;&#36208;&#21183;&#65292;
+            &#24182;&#22312;&#22270;&#19978;&#21472;&#21152;&#22343;&#20540;&#21450;&#21152;&#20943; 1 &#20010;&#26631;&#20934;&#24046;&#36741;&#21161;&#32447;&#12290;
+          </p>
+        </div>
+        <div class="stat-grid overview-grid">
+          <article class="stat-card">
+            <span>&#24403;&#21069;&#32929;&#31080;</span>
+            <strong id="stock-name">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>&#26679;&#26412;&#21306;&#38388;</span>
+            <strong id="date-range">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>&#26368;&#26032; PE</span>
+            <strong id="latest-pe">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>&#26368;&#26032; PB</span>
+            <strong id="latest-pb">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>&#26368;&#26032;&#24066;&#38144;&#29575;</span>
+            <strong id="latest-ps">-</strong>
+          </article>
+          <article class="stat-card">
+            <span>&#24066;&#20540;&#25968;&#25454;&#25130;&#33267;</span>
+            <strong id="market-performance-latest-date">-</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel-card">
+        <div class="panel-header panel-controls">
+          <div>
+            <h2>&#20272;&#20540;&#25351;&#26631;&#36208;&#21183;</h2>
+            <p>&#25351;&#26631;&#40664;&#35748;&#21462;&#36817; 10 &#24180;&#65292;&#33509;&#19978;&#24066;&#26102;&#38388;&#19981;&#36275; 10 &#24180;&#21017;&#20840;&#37096;&#23637;&#31034;&#12290;</p>
+          </div>
+          <form id="stock-form" class="stock-form">
+            <label class="stock-input-group" for="stock-symbol">
+              <span>&#32929;&#31080;&#20195;&#30721;</span>
+              <input id="stock-symbol" name="symbol" type="text" inputmode="numeric" maxlength="6" placeholder="&#20363;&#22914; 600036" value="600036" />
+            </label>
+            <button id="reload-btn" type="submit">&#26597;&#35810;&#25968;&#25454;</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel-card metric-panel">
+        <div class="metric-panel-head">
+          <div>
+            <h2>PE(TTM)</h2>
+            <p id="pe-summary" class="metric-summary">-</p>
+          </div>
+        </div>
+        <div id="pe-chart" class="chart metric-chart"></div>
+      </section>
+
+      <section class="panel-card metric-panel">
+        <div class="metric-panel-head">
+          <div>
+            <h2>&#24066;&#20928;&#29575;</h2>
+            <p id="pb-summary" class="metric-summary">-</p>
+          </div>
+        </div>
+        <div id="pb-chart" class="chart metric-chart"></div>
+      </section>
+
+      <section class="panel-card metric-panel">
+        <div class="metric-panel-head">
+          <div>
+            <h2>&#24066;&#38144;&#29575;</h2>
+            <p id="ps-summary" class="metric-summary">-</p>
+          </div>
+        </div>
+        <div id="ps-chart" class="chart metric-chart"></div>
+      </section>
+
+      <section class="panel-card metric-panel">
+        <div class="metric-panel-head">
+          <div>
+            <h2>&#24066;&#20540;&#19982;&#19994;&#32489;&#36208;&#21183;</h2>
+            <p id="market-performance-summary" class="metric-summary">-</p>
+          </div>
+        </div>
+        <div id="market-performance-chart" class="chart metric-chart"></div>
+      </section>
+    </main>
+
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

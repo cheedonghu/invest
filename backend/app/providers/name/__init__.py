@@ -1,0 +1,1 @@
+from backend.app.providers.name.eastmoney_individual_info_name_provider import EastmoneyIndividualInfoNameProvider

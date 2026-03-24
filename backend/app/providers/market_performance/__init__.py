@@ -1,0 +1,1 @@
+from backend.app.providers.market_performance.eastmoney_market_performance_provider import EastmoneyMarketPerformanceProvider

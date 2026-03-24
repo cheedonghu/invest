@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  invest-app:
+    image: cheedonghu/invest:latest
+    container_name: invest
+    ports:
+      - "8000:8000"
+    environment:
+      STOCK_DB_CONFIG_MOUNT_PATH: /config/config.toml
+    volumes:
+      - ./config/config.toml:/config/config.toml:ro
+    restart: unless-stopped
