@@ -275,7 +275,11 @@ class StockService:
             performance_cleaned["date"],
             performance_cleaned["revenue"],
         )
-        performance_cleaned = performance_cleaned.dropna(subset=["revenue"]).reset_index(drop=True)
+        performance_cleaned["net_profit"] = self._calculate_ttm_from_cumulative(
+            performance_cleaned["date"],
+            performance_cleaned["net_profit"],
+        )
+        performance_cleaned = performance_cleaned.dropna(subset=["revenue", "net_profit"]).reset_index(drop=True)
         if performance_cleaned.empty:
             raise HTTPException(status_code=404, detail=f"market performance data is empty for symbol {symbol}")
 
