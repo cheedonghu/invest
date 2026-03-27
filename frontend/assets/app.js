@@ -15,6 +15,8 @@ const uiText = {
   query: "\u67e5\u8be2\u6570\u636e",
   invalidSymbol: "\u8bf7\u8f93\u5165 6 \u4f4d\u80a1\u7968\u4ee3\u7801",
   requestFailed: "\u63a5\u53e3\u8bf7\u6c42\u5931\u8d25",
+  emptyMarkReason: "\u8bf7\u8f93\u5165\u6807\u8bb0\u539f\u56e0",
+  markSuccess: "\u6807\u8bb0\u6210\u529f",
 };
 
 const stockNameElement = document.getElementById("stock-name");
@@ -30,6 +32,9 @@ const marketPerformanceLatestDateElement = document.getElementById("market-perfo
 const stockForm = document.getElementById("stock-form");
 const symbolInput = document.getElementById("stock-symbol");
 const reloadButton = document.getElementById("reload-btn");
+const markButton = document.getElementById("mark-btn");
+const markReasonInput = document.getElementById("stock-mark-reason");
+const markFeedbackElement = document.getElementById("mark-feedback");
 
 let currentValuationPayload = null;
 let currentPerformancePayload = null;
@@ -48,8 +53,21 @@ const metricMeta = {
   ps: { label: uiText.ps, color: "#f59e0b" },
 };
 
+const LAST_SYMBOL_STORAGE_KEY = "invest:last-symbol";
+
 function sanitizeSymbolInput(value) {
   return value.replace(/\D/g, "").slice(0, 6);
+}
+
+function persistLastSymbol(symbol) {
+  const normalizedSymbol = sanitizeSymbolInput(symbol);
+  if (normalizedSymbol.length === 6) {
+    window.localStorage.setItem(LAST_SYMBOL_STORAGE_KEY, normalizedSymbol);
+  }
+}
+
+function readLastSymbol() {
+  return sanitizeSymbolInput(window.localStorage.getItem(LAST_SYMBOL_STORAGE_KEY) || "");
 }
 
 function formatValue(value) {
@@ -364,9 +382,62 @@ function clearCharts(message) {
   });
 }
 
+function setFeedback(message, type = "info") {
+  markFeedbackElement.textContent = message || "";
+  markFeedbackElement.dataset.state = type;
+}
+
 function setLoadingState(loading) {
   reloadButton.disabled = loading;
   reloadButton.textContent = loading ? uiText.loading : uiText.query;
+}
+
+function setMarkingState(loading) {
+  markButton.disabled = loading;
+  markButton.textContent = loading ? uiText.loading : "\u6807\u8bb0\u80a1\u7968";
+}
+
+async function markCurrentStock() {
+  const normalizedSymbol = sanitizeSymbolInput(symbolInput.value);
+  const markReason = String(markReasonInput.value || "").trim();
+
+  if (normalizedSymbol.length !== 6) {
+    setFeedback(uiText.invalidSymbol, "error");
+    return;
+  }
+  if (!markReason) {
+    setFeedback(uiText.emptyMarkReason, "error");
+    return;
+  }
+
+  setMarkingState(true);
+  try {
+    const payload = {
+      symbol: normalizedSymbol,
+      mark_reason: markReason,
+      name: currentNamePayload?.name || undefined,
+    };
+    const response = await fetch("/api/stocks/marked/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.detail || `${uiText.requestFailed}: ${response.status}`);
+    }
+    if (!currentNamePayload && result.name) {
+      currentNamePayload = { symbol: result.symbol, name: result.name };
+      renderCurrentDashboard();
+    }
+    setFeedback(`${result.symbol} ${uiText.markSuccess}`, "success");
+  } catch (error) {
+    setFeedback(error.message, "error");
+  } finally {
+    setMarkingState(false);
+  }
 }
 
 function fetchStockName(symbol, timeoutMs = 2500) {
@@ -398,6 +469,7 @@ async function loadData(symbol) {
   }
 
   symbolInput.value = normalizedSymbol;
+  setFeedback("", "info");
   setLoadingState(true);
 
   try {
@@ -423,6 +495,7 @@ async function loadData(symbol) {
 
     currentValuationPayload = valuationPayload;
     currentPerformancePayload = performancePayload;
+    persistLastSymbol(normalizedSymbol);
     renderCurrentDashboard();
     setLoadingState(false);
 
@@ -438,15 +511,21 @@ async function loadData(symbol) {
 
 symbolInput.addEventListener("input", (event) => {
   event.target.value = sanitizeSymbolInput(event.target.value);
+  persistLastSymbol(event.target.value);
 });
 
 stockForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  persistLastSymbol(symbolInput.value);
   loadData(symbolInput.value);
+});
+
+markButton.addEventListener("click", () => {
+  markCurrentStock();
 });
 
 window.addEventListener("resize", () => {
   Object.values(chartMap).forEach((chart) => chart.resize());
 });
 
-loadData(symbolInput.value);
+loadData(readLastSymbol() || symbolInput.value);

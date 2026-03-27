@@ -25,3 +25,8 @@ def balance_sheet_page() -> FileResponse:
 @router.get("/valuation")
 def valuation_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "valuation.html")
+
+
+@router.get("/marked-stocks")
+def marked_stocks_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "marked-stocks.html")

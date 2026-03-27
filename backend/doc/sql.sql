@@ -22,7 +22,7 @@ CREATE TABLE stock_value_daily (
 
 CREATE TABLE stock_profit_sheet(
     security_code VARCHAR(10) NOT NULL COMMENT '股票代码 600519',
-    security_name_abbr VARCHAR(50) COMMENT '证券简称',
+    security_name_abbr VARCHAR(50) COMMENT '股票简称',
     report_date DATE NOT NULL COMMENT '报告期日期',
     report_type VARCHAR(20) NOT NULL COMMENT '报告类型',
     report_date_name VARCHAR(20) COMMENT '报告期名称',
@@ -35,3 +35,13 @@ CREATE TABLE stock_profit_sheet(
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (security_code, report_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='利润表';
+
+
+CREATE TABLE stock_marked (
+    security_code VARCHAR(10) NOT NULL COMMENT '股票代码 600036',
+    security_name_abbr VARCHAR(50) NOT NULL COMMENT '股票简称',
+    mark_reason VARCHAR(500) NOT NULL COMMENT '标记原因',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (security_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='股票标记表';
