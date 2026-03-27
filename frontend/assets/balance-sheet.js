@@ -33,8 +33,21 @@ let currentPayload = null;
 let currentNamePayload = null;
 let currentIndex = 0;
 
+const LAST_SYMBOL_STORAGE_KEY = "invest:last-symbol";
+
 function sanitizeSymbolInput(value) {
   return value.replace(/\D/g, "").slice(0, 6);
+}
+
+function persistLastSymbol(symbol) {
+  const normalizedSymbol = sanitizeSymbolInput(symbol);
+  if (normalizedSymbol.length === 6) {
+    window.localStorage.setItem(LAST_SYMBOL_STORAGE_KEY, normalizedSymbol);
+  }
+}
+
+function readLastSymbol() {
+  return sanitizeSymbolInput(window.localStorage.getItem(LAST_SYMBOL_STORAGE_KEY) || "");
 }
 
 function sanitizeYearsInput(value) {
@@ -308,6 +321,7 @@ async function loadBalanceSheet(symbol, years = "3") {
     }
 
     currentPayload = payload;
+    persistLastSymbol(normalizedSymbol);
     renderCurrentPeriod();
     setLoadingState(false);
 
@@ -326,6 +340,7 @@ async function loadBalanceSheet(symbol, years = "3") {
 
 symbolInput.addEventListener("input", (event) => {
   event.target.value = sanitizeSymbolInput(event.target.value);
+  persistLastSymbol(event.target.value);
 });
 
 yearsInput.addEventListener("input", (event) => {
@@ -334,6 +349,7 @@ yearsInput.addEventListener("input", (event) => {
 
 balanceForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  persistLastSymbol(symbolInput.value);
   loadBalanceSheet(symbolInput.value, yearsInput.value);
 });
 
@@ -359,4 +375,4 @@ nextButton.addEventListener("click", () => {
 });
 
 window.addEventListener("resize", () => chart.resize());
-loadBalanceSheet(symbolInput.value, yearsInput.value);
+loadBalanceSheet(readLastSymbol() || symbolInput.value, yearsInput.value);
