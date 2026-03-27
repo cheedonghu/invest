@@ -1,6 +1,6 @@
 fastapi==0.116.1
 uvicorn[standard]==0.35.0
-akshare==1.18.42
+akshare==1.18.47
 pandas==2.3.1
 PyMySQL==1.1.2
 DBUtils==3.1.2

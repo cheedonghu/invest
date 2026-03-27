@@ -1,3 +1,5 @@
 database.toml
 backend/app/config/config.toml
 .vscode
+__pycache__/
+*.pyc
