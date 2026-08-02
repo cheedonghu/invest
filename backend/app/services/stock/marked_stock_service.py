@@ -7,67 +7,46 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from backend.app.providers.interfaces.stock_provider import StockNameProvider
-from backend.app.providers.name.eastmoney_individual_info_name_provider import EastmoneyIndividualInfoNameProvider
-from backend.app.providers.name.xueqiu_individual_info_name_provider import XueqiuIndividualInfoNameProvider
-from backend.app.repositories.stock_marked_repository import StockMarkedRepository
+from backend.app.repositories.stock_info_repository import StockInfoRepository
+from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator
 
 
 logger = logging.getLogger(__name__)
 
 
 class MarkedStockService:
-    def __init__(self, repository: StockMarkedRepository | None = None) -> None:
-        self.repository = repository or StockMarkedRepository()
-        self.name_providers: list[StockNameProvider] = [
-            XueqiuIndividualInfoNameProvider(),
-            EastmoneyIndividualInfoNameProvider(),
-        ]
+    def __init__(
+        self,
+        repository: StockInfoRepository | None = None,
+        coordinator: StockSyncCoordinator | None = None,
+    ) -> None:
+        self.repository = repository or StockInfoRepository()
+        self.coordinator = coordinator or StockSyncCoordinator()
 
     def list_marked_stocks(self) -> dict[str, Any]:
         self._ensure_database_available()
-        items = [self._serialize_row(row) for row in self.repository.fetch_all()]
-        return {
-            "count": len(items),
-            "items": items,
-        }
+        items = [self._serialize_row(row) for row in self.repository.fetch_marked()]
+        return {"count": len(items), "items": items}
 
     def upsert_marked_stock(self, symbol: str, mark_reason: str, name: str | None = None) -> dict[str, Any]:
         self._ensure_database_available()
-        normalized_symbol = self.normalize_symbol(symbol)
+        security_code = self.normalize_symbol(symbol)
         normalized_reason = self.normalize_reason(mark_reason)
-        resolved_name = self._resolve_stock_name(normalized_symbol, name=name)
 
-        self.repository.upsert(
-            symbol=normalized_symbol,
-            name=resolved_name,
-            mark_reason=normalized_reason,
-        )
-        row = self.repository.fetch_by_symbol(normalized_symbol)
+        self.repository.upsert_mark_reason(security_code, normalized_reason)
+
+        # 名称由备份流程写入。若调用方显式给了名称则直接采用，
+        # 否则触发一次同步，名称会随利润表一并落库。
+        explicit_name = (name or "").strip()
+        if explicit_name:
+            self.repository.upsert_name(security_code, explicit_name)
+        else:
+            self.coordinator.maybe_sync(security_code)
+
+        row = self.repository.fetch_by_code(security_code)
         if row is None:
             raise HTTPException(status_code=500, detail="marked stock was not persisted")
         return self._serialize_row(row)
-
-    def _resolve_stock_name(self, symbol: str, name: str | None = None) -> str:
-        normalized_name = (name or "").strip()
-        if normalized_name:
-            return normalized_name
-
-        existing = self.repository.fetch_by_symbol(symbol)
-        if existing and str(existing.get("name") or "").strip():
-            return str(existing["name"]).strip()
-
-        for provider in self.name_providers:
-            try:
-                return provider.fetch(symbol)
-            except Exception as exc:
-                logger.warning(
-                    "Marked stock name provider %s failed for symbol=%s: %s",
-                    getattr(provider, "source_name", provider.__class__.__name__),
-                    symbol,
-                    exc,
-                )
-        return symbol
 
     def _ensure_database_available(self) -> None:
         if not self.repository.is_available:
@@ -89,9 +68,13 @@ class MarkedStockService:
 
     @classmethod
     def _serialize_row(cls, row: dict[str, Any]) -> dict[str, Any]:
+        security_code = str(row.get("security_code") or "")
+        name = str(row.get("security_name_abbr") or "").strip()
         return {
-            "symbol": str(row.get("symbol") or ""),
-            "name": str(row.get("name") or ""),
+            "symbol": security_code,
+            # 名称缺失时临时回退为代号供前端展示，不写回数据库，
+            # 待备份流程补齐后自然恢复。
+            "name": name or security_code,
             "mark_reason": str(row.get("mark_reason") or ""),
             "created_at": cls._format_datetime(row.get("created_at")),
             "updated_at": cls._format_datetime(row.get("updated_at")),
