@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 import logging
 
@@ -27,7 +28,7 @@ class StockProfitSheetRepository:
     def connect(self):
         return self.session_factory.connect(self.table_name)
 
-    def fetch_by_symbol(self, symbol: str) -> pd.DataFrame:
+    def fetch_by_security_code(self, security_code: str) -> pd.DataFrame:
         query = f"""
             SELECT
                 security_code,
@@ -46,28 +47,19 @@ class StockProfitSheetRepository:
         """
         with self.connect() as connection:
             cursor = connection.cursor()
-            cursor.execute(query, [symbol])
+            cursor.execute(query, [security_code])
             rows = cursor.fetchall() or []
         return pd.DataFrame(rows)
 
-    def exists_by_symbol(self, symbol: str) -> bool:
-        query = f"""
-            SELECT 1
-            FROM {self.table_name}
-            WHERE security_code = %s
-            LIMIT 1
-        """
+    def latest_report_date(self, security_code: str) -> date | None:
+        query = f"SELECT MAX(report_date) AS latest_report_date FROM {self.table_name} WHERE security_code = %s"
         with self.connect() as connection:
             cursor = connection.cursor()
-            cursor.execute(query, [symbol])
-            row = cursor.fetchone()
-        return row is not None
+            cursor.execute(query, [security_code])
+            row = cursor.fetchone() or {}
+        return row.get("latest_report_date")
 
-    def delete_by_symbol(self, cursor: Any, symbol: str) -> int:
-        query = f"DELETE FROM {self.table_name} WHERE security_code = %s"
-        return int(cursor.execute(query, [symbol]))
-
-    def insert_rows(self, cursor: Any, symbol: str, rows: list[dict]) -> int:
+    def upsert_rows(self, cursor: Any, security_code: str, rows: list[dict]) -> int:
         query = f"""
             INSERT INTO {self.table_name} (
                 security_code,
@@ -92,12 +84,21 @@ class StockProfitSheetRepository:
                 %(total_operate_cost)s,
                 %(opinion_type)s
             )
+            ON DUPLICATE KEY UPDATE
+                security_name_abbr = VALUES(security_name_abbr),
+                report_type = VALUES(report_type),
+                report_date_name = VALUES(report_date_name),
+                total_operate_income = VALUES(total_operate_income),
+                netprofit = VALUES(netprofit),
+                basic_eps = VALUES(basic_eps),
+                total_operate_cost = VALUES(total_operate_cost),
+                opinion_type = VALUES(opinion_type)
         """
-        return self._insert_in_batches(cursor, symbol, query, rows)
+        return self._upsert_in_batches(cursor, security_code, query, rows)
 
-    def _insert_in_batches(self, cursor: Any, symbol: str, query: str, rows: list[dict]) -> int:
+    def _upsert_in_batches(self, cursor: Any, security_code: str, query: str, rows: list[dict]) -> int:
         if not rows:
-            logger.info("[%s] no rows to insert for %s", self.table_name, symbol)
+            logger.info("[%s] no rows to insert for %s", self.table_name, security_code)
             return 0
 
         total_rows = len(rows)
@@ -111,7 +112,7 @@ class StockProfitSheetRepository:
             logger.info(
                 "[%s] batch executed for %s: batch %s/%s, rows %s-%s/%s, affected=%s",
                 self.table_name,
-                symbol,
+                security_code,
                 batch_index,
                 batch_count,
                 start + 1,

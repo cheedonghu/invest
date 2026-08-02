@@ -55,7 +55,7 @@ class DatabaseMarketPerformanceProvider(MarketPerformanceProvider):
             }
         )
 
-        profit_df = self.profit_repository.fetch_by_symbol(symbol)
+        profit_df = self.profit_repository.fetch_by_security_code(symbol)
         if isinstance(profit_df, pd.DataFrame) and not profit_df.empty:
             logger.info("Using profit table stock_profit_sheet for symbol=%s", symbol)
             return valuation_df, profit_df
