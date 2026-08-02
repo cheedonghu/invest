@@ -59,7 +59,6 @@ function buildRow(item) {
   const markReason = escapeHtml(item.mark_reason || "");
   const createdAt = escapeHtml(item.created_at || "-");
   const updatedAt = escapeHtml(item.updated_at || "-");
-  const rawName = escapeHtml(item.name || "");
   row.innerHTML = `
     <td><strong>${symbol}</strong></td>
     <td>${name}</td>
@@ -70,7 +69,7 @@ function buildRow(item) {
     <td>${createdAt}</td>
     <td>${updatedAt}</td>
     <td>
-      <button type="button" class="table-save-btn secondary-btn" data-symbol="${symbol}" data-name="${rawName}">${uiText.saveRow}</button>
+      <button type="button" class="table-save-btn secondary-btn" data-symbol="${symbol}">${uiText.saveRow}</button>
     </td>
   `;
   return row;
@@ -165,7 +164,6 @@ tableBody.addEventListener("click", async (event) => {
   }
 
   const symbol = target.dataset.symbol;
-  const name = target.dataset.name || undefined;
   const reasonInput = document.getElementById(`reason-${symbol}`);
   const markReason = normalizeReason(reasonInput?.value || "");
   if (!markReason) {
@@ -177,7 +175,7 @@ tableBody.addEventListener("click", async (event) => {
   target.disabled = true;
   target.textContent = uiText.saving;
   try {
-    await upsertMarkedStock({ symbol, mark_reason: markReason, name }, `${symbol} ${uiText.updated}`);
+    await upsertMarkedStock({ symbol, mark_reason: markReason }, `${symbol} ${uiText.updated}`);
   } catch (error) {
     setFeedback(error.message, "error");
   } finally {

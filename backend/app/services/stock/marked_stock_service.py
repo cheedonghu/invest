@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import re
 from datetime import date, datetime
 from typing import Any
@@ -9,9 +8,6 @@ from fastapi import HTTPException
 
 from backend.app.repositories.stock_info_repository import StockInfoRepository
 from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator
-
-
-logger = logging.getLogger(__name__)
 
 
 class MarkedStockService:
