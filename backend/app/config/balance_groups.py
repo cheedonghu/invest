@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 
 def contains(pattern: str, include_in_total: bool = True, detail_label: str | None = None) -> dict:

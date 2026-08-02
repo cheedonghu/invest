@@ -18,7 +18,7 @@ class StockValueDailyRepositoryTestCase(unittest.TestCase):
 
         sample = repository.fetch_one_sample()
         self.assertIsNotNone(sample, "stock_value_daily has no rows")
-        self.assertIn("symbol", sample)
+        self.assertIn("security_code", sample)
         self.assertIn("trade_date", sample)
 
         print("database sample row:", sample)

@@ -22,7 +22,7 @@ class DatabaseValuationProvider(ValuationMetricsProvider):
         if not self.repository.is_available:
             raise RuntimeError("stock_value_daily repository is not configured")
 
-        valuation_df = self.repository.fetch_by_symbol(symbol)
+        valuation_df = self.repository.fetch_by_security_code(symbol)
         if not isinstance(valuation_df, pd.DataFrame) or valuation_df.empty:
             raise RuntimeError(f"stock_value_daily did not contain symbol {symbol}")
         return valuation_df

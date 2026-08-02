@@ -27,11 +27,3 @@ class MarketPerformanceProvider(ABC):
     @abstractmethod
     def fetch(self, symbol: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         raise NotImplementedError
-
-
-class StockNameProvider(ABC):
-    source_name: str
-
-    @abstractmethod
-    def fetch(self, symbol: str) -> str:
-        raise NotImplementedError

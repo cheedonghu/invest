@@ -29,7 +29,7 @@ class StockValueDailyRepository:
     def connect(self):
         return self.session_factory.connect(self.table_name)
 
-    def fetch_by_symbol(self, symbol: str) -> pd.DataFrame:
+    def fetch_by_security_code(self, security_code: str) -> pd.DataFrame:
         query = f"""
             SELECT
                 trade_date,
@@ -46,19 +46,19 @@ class StockValueDailyRepository:
                 pcf,
                 ps
             FROM {self.table_name}
-            WHERE symbol = %s
+            WHERE security_code = %s
             ORDER BY trade_date ASC
         """
         with self.connect() as connection:
             cursor = connection.cursor()
-            cursor.execute(query, [symbol])
+            cursor.execute(query, [security_code])
             rows = cursor.fetchall() or []
         return pd.DataFrame(rows)
 
     def fetch_one_sample(self) -> dict[str, Any] | None:
         query = f"""
             SELECT
-                symbol,
+                security_code,
                 trade_date,
                 close_price,
                 pct_change,
@@ -73,7 +73,7 @@ class StockValueDailyRepository:
                 pcf,
                 ps
             FROM {self.table_name}
-            ORDER BY trade_date DESC, symbol ASC
+            ORDER BY trade_date DESC, security_code ASC
             LIMIT 1
         """
         with self.connect() as connection:
@@ -82,22 +82,18 @@ class StockValueDailyRepository:
             row = cursor.fetchone()
         return row
 
-    def latest_trade_date(self, symbol: str) -> date | None:
-        query = f"SELECT MAX(trade_date) AS latest_trade_date FROM {self.table_name} WHERE symbol = %s"
+    def latest_trade_date(self, security_code: str) -> date | None:
+        query = f"SELECT MAX(trade_date) AS latest_trade_date FROM {self.table_name} WHERE security_code = %s"
         with self.connect() as connection:
             cursor = connection.cursor()
-            cursor.execute(query, [symbol])
+            cursor.execute(query, [security_code])
             row = cursor.fetchone() or {}
         return row.get("latest_trade_date")
 
-    def delete_by_symbol(self, cursor: Any, symbol: str) -> int:
-        query = f"DELETE FROM {self.table_name} WHERE symbol = %s"
-        return int(cursor.execute(query, [symbol]))
-
-    def insert_rows(self, cursor: Any, symbol: str, rows: list[dict]) -> int:
+    def upsert_rows(self, cursor: Any, security_code: str, rows: list[dict]) -> int:
         query = f"""
             INSERT INTO {self.table_name} (
-                symbol,
+                security_code,
                 trade_date,
                 close_price,
                 pct_change,
@@ -114,7 +110,7 @@ class StockValueDailyRepository:
                 created_at,
                 updated_at
             ) VALUES (
-                %(symbol)s,
+                %(security_code)s,
                 %(trade_date)s,
                 %(close_price)s,
                 %(pct_change)s,
@@ -131,12 +127,26 @@ class StockValueDailyRepository:
                 CURRENT_DATE,
                 CURRENT_DATE
             )
+            ON DUPLICATE KEY UPDATE
+                close_price = VALUES(close_price),
+                pct_change = VALUES(pct_change),
+                total_market_value = VALUES(total_market_value),
+                float_market_value = VALUES(float_market_value),
+                total_shares = VALUES(total_shares),
+                float_shares = VALUES(float_shares),
+                pe_ttm = VALUES(pe_ttm),
+                pe_static = VALUES(pe_static),
+                pb = VALUES(pb),
+                peg = VALUES(peg),
+                pcf = VALUES(pcf),
+                ps = VALUES(ps),
+                updated_at = CURRENT_DATE
         """
-        return self._insert_in_batches(cursor, symbol, query, rows)
+        return self._upsert_in_batches(cursor, security_code, query, rows)
 
-    def _insert_in_batches(self, cursor: Any, symbol: str, query: str, rows: list[dict]) -> int:
+    def _upsert_in_batches(self, cursor: Any, security_code: str, query: str, rows: list[dict]) -> int:
         if not rows:
-            logger.info("[%s] no rows to insert for %s", self.table_name, symbol)
+            logger.info("[%s] no rows to insert for %s", self.table_name, security_code)
             return 0
 
         total_rows = len(rows)
@@ -150,7 +160,7 @@ class StockValueDailyRepository:
             logger.info(
                 "[%s] batch executed for %s: batch %s/%s, rows %s-%s/%s, affected=%s",
                 self.table_name,
-                symbol,
+                security_code,
                 batch_index,
                 batch_count,
                 start + 1,

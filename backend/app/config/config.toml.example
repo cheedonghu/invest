@@ -15,3 +15,7 @@ blocking = true
 max_usage = 0
 ping = 1
 set_session = []
+
+[agent]
+DEEPSEEK_API_KEY=""
+LLM_MODEL_ID = ""
