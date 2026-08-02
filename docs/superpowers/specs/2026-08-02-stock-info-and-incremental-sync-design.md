@@ -87,6 +87,7 @@ if self.stock_profit_sheet_repository.exists_by_symbol(symbol):
 | 字段命名 | 与 akshare / 东财返回字段一致（`security_code`、`security_name_abbr`） |
 | 并发控制 | 进程内 in-flight 集合去重 |
 | 历史数据 | `stock_marked` 与 `stock_value_daily` 数据全部丢弃，重建表 |
+| 手工运维 | 新增两个 POST 端点强制同步两侧，跳过新鲜度门控但保留并发保护 |
 
 ## 3. 数据模型
 
@@ -228,6 +229,32 @@ in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次�
 带 2.5s 超时且失败静默降级），实现改为查 `stock_info` 主键，
 由两次外部 HTTP 变为一次主键查询。
 
+### 4.5 手工运维接口
+
+新增两个端点，分别强制触发两侧同步：
+
+```
+POST /api/ops/sync/valuation?symbol=600519   → 强制 sync_valuation()
+POST /api/ops/sync/profit?symbol=600519      → 强制 sync_profit()
+```
+
+**跳过全部新鲜度门控**：日线不查交易日历、利润表不做报告期探测，直接拉取并 upsert。
+用于数据修复、验证与排障。
+
+设计取舍：
+
+- **同步执行、返回写入统计**（affected rows、覆盖日期区间）。运维接口需要立即看到
+  结果，异步返回 202 对排障无用。利润表侧最慢约 4s，可接受。
+- **仍参与 in-flight 去重**。「不校验」指不校验新鲜度，并发保护不能免——否则手工
+  触发与后台同步可能同时写同一张表。若该 `security_code` 正在同步中，返回 **409**
+  并提示稍后重试，而不是排队等待。
+- **用 POST 而非 GET**。这两个端点有写副作用。现有 `/api/ops/backup/stock-value`
+  用的是 GET，但它将被这两个端点取代，故不存在风格分裂。
+
+`/api/ops/backup/stock-value` **移除**。已确认无任何调用方（前端仅使用
+`/api/stocks/name` 与 `/api/stocks/marked/`），其「拉两张表 + 全量替换」的语义
+也已被拆分后的两个 upsert 端点覆盖。
+
 ## 5. 文件改动面
 
 | 动作 | 文件 |
@@ -242,6 +269,7 @@ in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次�
 | 改 | `repositories/stock_value_daily_repository.py` — 列名 `symbol`→`security_code`，新增 `upsert_rows` |
 | 改 | `repositories/stock_profit_sheet_repository.py` — 新增 `upsert_rows` 与 `latest_report_date`；移除 `exists_by_symbol` |
 | 改 | `providers/market_performance/database_market_performance_provider.py` — rename 映射同步列名 |
+| 改 | `controllers/ops_controller.py` — 移除 `/backup/stock-value`，新增两个强制同步端点 |
 | 改 | `tests/test_stock_value_daily_repository.py` — 跟随列名调整 |
 | 删 | `providers/name/`（整目录，含 2 个 provider 与 `__init__.py`） |
 | 删 | `repositories/stock_marked_repository.py` |
@@ -276,6 +304,8 @@ in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次�
 
 - `upsert_rows` 幂等：同一批数据写入两次，第二次新增 0 行
 - `stock_info` 流转：标记后 `security_name_abbr` 为 NULL → 备份后被回填
+- 手工端点跳过门控：水位线已是最新时调用 `/api/ops/sync/profit` 仍必须真实拉取
+- 手工端点遇 in-flight 冲突返回 409
 - `tests/test_stock_value_daily_repository.py` 跟随列名调整
 
 ## 8. 明确不做的事
