@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class FetchMarkedStockTool:
     """获取用户已标记（感兴趣）的股票列表。
 
-    数据统一走 MarkedStockService -> StockMarkedRepository -> DatabaseSessionFactory，
+    数据统一走 MarkedStockService -> StockInfoRepository -> DatabaseSessionFactory，
     连接参数由 backend/app/config/config.toml 提供，不在此处直连数据库。
     """
 
