@@ -27,3 +27,17 @@ class EastmoneyMarketPerformanceProvider(MarketPerformanceProvider):
         if not isinstance(profit_df, pd.DataFrame) or profit_df.empty:
             raise RuntimeError("stock_profit_sheet_by_report_em returned empty dataframe")
         return valuation_df, profit_df
+
+    def fetch_valuation(self, symbol: str) -> pd.DataFrame:
+        logger.info("Fetching valuation for symbol=%s", symbol)
+        valuation_df = ak.stock_value_em(symbol=symbol)
+        if not isinstance(valuation_df, pd.DataFrame) or valuation_df.empty:
+            raise RuntimeError("stock_value_em returned empty dataframe")
+        return valuation_df
+
+    def fetch_profit(self, symbol: str) -> pd.DataFrame:
+        logger.info("Fetching profit sheet for symbol=%s", symbol)
+        profit_df = ak.stock_profit_sheet_by_report_em(symbol=self._to_eastmoney_symbol(symbol))
+        if not isinstance(profit_df, pd.DataFrame) or profit_df.empty:
+            raise RuntimeError("stock_profit_sheet_by_report_em returned empty dataframe")
+        return profit_df

@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
-import threading
-from time import perf_counter
 from typing import Any
 
 import pandas as pd
@@ -12,6 +9,7 @@ from fastapi import HTTPException
 
 from backend.app.providers.market_performance.eastmoney_market_performance_provider import EastmoneyMarketPerformanceProvider
 from backend.app.repositories.db_session import DatabaseSessionFactory
+from backend.app.repositories.stock_info_repository import StockInfoRepository
 from backend.app.repositories.stock_profit_sheet_repository import StockProfitSheetRepository
 from backend.app.repositories.stock_value_daily_repository import StockValueDailyRepository
 
@@ -24,72 +22,74 @@ class StockBackupService:
         self.session_factory = DatabaseSessionFactory()
         self.stock_value_daily_repository = StockValueDailyRepository(session_factory=self.session_factory)
         self.stock_profit_sheet_repository = StockProfitSheetRepository(session_factory=self.session_factory)
+        self.stock_info_repository = StockInfoRepository(session_factory=self.session_factory)
         self.provider = EastmoneyMarketPerformanceProvider()
 
-    def backup_stock_value(self, symbol: str) -> dict[str, Any]:
-        normalized_symbol = self.normalize_symbol(symbol)
+    def sync_valuation(self, security_code: str) -> dict[str, Any]:
+        normalized = self.normalize_symbol(security_code)
         try:
-            valuation_df, profit_df = self.provider.fetch(normalized_symbol)
-            valuation_rows = self._normalize_stock_value_daily_rows(valuation_df, normalized_symbol)
-            profit_rows = self._normalize_stock_profit_sheet_rows(profit_df, normalized_symbol)
-            backup_summary = self._replace_backup_rows(
-                symbol=normalized_symbol,
-                valuation_rows=valuation_rows,
-                profit_rows=profit_rows,
-            )
+            valuation_df = self.provider.fetch_valuation(normalized)
+            rows = self._normalize_stock_value_daily_rows(valuation_df, normalized)
+            with self.session_factory.connect("stock_value_sync") as connection:
+                cursor = connection.cursor()
+                try:
+                    affected = self.stock_value_daily_repository.upsert_rows(cursor, normalized, rows)
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    logger.exception("valuation sync rolled back for %s", normalized)
+                    raise
         except Exception as exc:
-            logger.exception("stock backup failed for symbol=%s", normalized_symbol)
-            raise HTTPException(status_code=503, detail=f"stock backup failed: {exc}") from exc
+            logger.exception("valuation sync failed for security_code=%s", normalized)
+            raise HTTPException(status_code=503, detail=f"valuation sync failed: {exc}") from exc
 
-        latest_available_date = self._extract_latest_available_date(valuation_df)
-        latest_report_date = self._extract_latest_available_date(profit_df)
         return {
-            "symbol": normalized_symbol,
+            "security_code": normalized,
             "source": self.provider.source_name,
-            "tables": {
-                "valuation": self.stock_value_daily_repository.table_name,
-                "profit": self.stock_profit_sheet_repository.table_name,
-            },
-            "affected_rows": {
-                "valuation": backup_summary["valuation_inserted"],
-                "profit": backup_summary["profit_inserted"],
-            },
-            "deleted_rows": {
-                "valuation": backup_summary["valuation_deleted"],
-                "profit": backup_summary["profit_deleted"],
-            },
-            "records": {
-                "valuation": len(valuation_rows),
-                "profit": len(profit_rows),
-            },
-            "latest_available_date": latest_available_date,
-            "latest_report_date": latest_report_date,
+            "table": self.stock_value_daily_repository.table_name,
+            "affected_rows": affected,
+            "records": len(rows),
+            "latest_available_date": self._extract_latest_available_date(valuation_df),
         }
 
-    def trigger_profit_sheet_sync_async(self, symbol: str) -> None:
-        normalized_symbol = self.normalize_symbol(symbol)
-        worker = threading.Thread(
-            target=self._sync_profit_sheet_if_missing,
-            args=(normalized_symbol,),
-            name=f"stock-profit-sync-{normalized_symbol}",
-            daemon=True,
-        )
-        worker.start()
-
-    def _sync_profit_sheet_if_missing(self, symbol: str) -> None:
+    def sync_profit(self, security_code: str) -> dict[str, Any]:
+        normalized = self.normalize_symbol(security_code)
         try:
-            if not self.stock_profit_sheet_repository.is_available:
-                logger.info("Skip async stock backup for %s because database is not configured", symbol)
-                return
+            profit_df = self.provider.fetch_profit(normalized)
+            rows = self._normalize_stock_profit_sheet_rows(profit_df, normalized)
+            name = self._extract_name(rows)
+            with self.session_factory.connect("stock_profit_sync") as connection:
+                cursor = connection.cursor()
+                try:
+                    affected = self.stock_profit_sheet_repository.upsert_rows(cursor, normalized, rows)
+                    if name:
+                        self.stock_info_repository.upsert_name_with_cursor(cursor, normalized, name)
+                    connection.commit()
+                except Exception:
+                    connection.rollback()
+                    logger.exception("profit sync rolled back for %s", normalized)
+                    raise
+        except Exception as exc:
+            logger.exception("profit sync failed for security_code=%s", normalized)
+            raise HTTPException(status_code=503, detail=f"profit sync failed: {exc}") from exc
 
-            if self.stock_profit_sheet_repository.exists_by_symbol(symbol):
-                logger.info("Skip async stock backup for %s because stock_profit_sheet already has data", symbol)
-                return
+        return {
+            "security_code": normalized,
+            "source": self.provider.source_name,
+            "table": self.stock_profit_sheet_repository.table_name,
+            "affected_rows": affected,
+            "records": len(rows),
+            "latest_report_date": self._extract_latest_available_date(profit_df),
+            "security_name_abbr": name,
+        }
 
-            logger.info("Trigger async stock backup for %s because stock_profit_sheet has no data", symbol)
-            self.backup_stock_value(symbol)
-        except Exception:
-            logger.exception("Async stock backup failed for %s", symbol)
+    @staticmethod
+    def _extract_name(rows: list[dict[str, Any]]) -> str | None:
+        for row in reversed(rows):
+            candidate = (row.get("security_name_abbr") or "").strip()
+            if candidate:
+                return candidate
+        return None
 
     @staticmethod
     def normalize_symbol(symbol: str) -> str:
@@ -97,44 +97,6 @@ class StockBackupService:
         if len(cleaned) != 6:
             raise HTTPException(status_code=400, detail="symbol must be a 6-digit A-share stock code")
         return cleaned
-
-    def _replace_backup_rows(self, symbol: str, valuation_rows: list[dict], profit_rows: list[dict]) -> dict[str, int]:
-        with self.session_factory.connect("stock_backup") as connection:
-            cursor = connection.cursor()
-            try:
-                valuation_deleted = self.stock_value_daily_repository.delete_by_symbol(cursor, symbol)
-                logger.info("[%s] cleared existing rows for %s: deleted=%s pid=%s service_id=%s", self.stock_value_daily_repository.table_name, symbol, valuation_deleted, os.getpid(), id(self))
-                valuation_inserted = self.stock_value_daily_repository.insert_rows(cursor, symbol, valuation_rows)
-
-                profit_deleted = self.stock_profit_sheet_repository.delete_by_symbol(cursor, symbol)
-                logger.info("[%s] cleared existing rows for %s: deleted=%s pid=%s service_id=%s", self.stock_profit_sheet_repository.table_name, symbol, profit_deleted, os.getpid(), id(self))
-                profit_inserted = self.stock_profit_sheet_repository.insert_rows(cursor, symbol, profit_rows)
-
-                logger.info("About to commit backup transaction for %s pid=%s service_id=%s", symbol, os.getpid(), id(self))
-                commit_started_at = perf_counter()
-                connection.commit()
-                commit_elapsed = perf_counter() - commit_started_at
-                logger.info(
-                    "Backup transaction committed for %s: valuation[deleted=%s inserted=%s] profit[deleted=%s inserted=%s] commit_elapsed=%.3fs pid=%s service_id=%s",
-                    symbol,
-                    valuation_deleted,
-                    valuation_inserted,
-                    profit_deleted,
-                    profit_inserted,
-                    commit_elapsed,
-                    os.getpid(),
-                    id(self),
-                )
-                return {
-                    "valuation_deleted": int(valuation_deleted),
-                    "valuation_inserted": int(valuation_inserted),
-                    "profit_deleted": int(profit_deleted),
-                    "profit_inserted": int(profit_inserted),
-                }
-            except Exception:
-                connection.rollback()
-                logger.exception("Backup transaction rolled back for %s", symbol)
-                raise
 
     def _normalize_stock_value_daily_rows(self, raw_df: pd.DataFrame, symbol: str) -> list[dict[str, Any]]:
         date_col = self._find_column(raw_df, ["\u6570\u636e\u65e5\u671f", "date", "trade_date"])
@@ -162,7 +124,7 @@ class StockBackupService:
         rows: list[dict[str, Any]] = []
         for row in cleaned.itertuples(index=False):
             rows.append({
-                "symbol": symbol,
+                "security_code": symbol,
                 "trade_date": row.trade_date,
                 "close_price": None if pd.isna(row.close_price) else float(row.close_price),
                 "pct_change": None if pd.isna(row.pct_change) else float(row.pct_change),
