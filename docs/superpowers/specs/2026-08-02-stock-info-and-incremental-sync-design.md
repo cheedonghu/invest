@@ -80,7 +80,8 @@ if self.stock_profit_sheet_repository.exists_by_symbol(symbol):
 | 议题 | 决策 |
 |---|---|
 | 增量更新触发时机 | 查询时按新鲜度惰性触发，异步后台线程，不阻塞响应 |
-| 新鲜度判定 | 两级门控：一级工作日近似（纯本地），二级真实交易日历确认；一次实现 |
+| 日线新鲜度判定 | 两级门控：一级工作日近似（纯本地），二级真实交易日历确认；一次实现 |
+| 利润表新鲜度判定 | 独立门控：先用 1 次轻量请求探测上游最新报告期，晚于库中水位线才拉全量 |
 | 名称数据源 | 删除雪球与东财两个 name provider，名称改由备份流程写入 |
 | 元数据存储 | 新建 `stock_info` 表，合并 `stock_marked`；`mark_reason` 非空即为已标记 |
 | 字段命名 | 与 akshare / 东财返回字段一致（`security_code`、`security_name_abbr`） |
@@ -159,19 +160,45 @@ GET /api/stocks/valuation-metrics?symbol=600519
   ├─ StockService 照常查库并立即返回          ← 不阻塞响应
   └─ StockSyncCoordinator.maybe_sync("600519")
        ├ in-flight 集合已含该 security_code → return
-       ├ is_stale(水位线) == False          → return（零网络开销）
-       └ 否则 → 起后台线程 → StockBackupService.sync() → finally 移出 in-flight
+       ├ is_stale(日线水位线) == False       → return（零网络开销）
+       └ 起后台线程：
+            ├ sync_valuation()  拉 stock_value_em → upsert stock_value_daily
+            ├ 探测上游最新报告期（1 请求 0.1s）
+            │   └ 晚于 stock_profit_sheet 水位线才 sync_profit()
+            │        → upsert stock_profit_sheet + 写 stock_info 名称
+            └ finally 移出 in-flight
 ```
 
-水位线取 `StockValueDailyRepository.latest_trade_date(security_code)`
+日线水位线取 `StockValueDailyRepository.latest_trade_date(security_code)`
 （该方法已存在于代码库但从未被调用）。
+利润表水位线取 `StockProfitSheetRepository.latest_report_date(security_code)`（需新增）。
 
-**只用日线水位线做判定，一次同步刷新两张表。** 利润表是季度数据，
-按日线水位线触发意味着每个交易日都会重拉一次利润表
-（`ak.stock_profit_sheet_by_report_em` 实测 3.9s、内部 21 次分页请求）。
-接受这一开销，理由是：同步在后台异步执行、有 in-flight 去重、
-且 upsert 幂等不会脏数据；换来的是判定逻辑只有一条水位线，不必维护两套。
-若后续该开销成为问题，可为利润表单独引入 `report_date` 水位线按季度判定。
+**日线门控在外层，意味着日线新鲜时利润表探测也不会执行。** 财报披露当日
+若日线已同步过，要到下一个交易日日线再次变陈旧时才会探测到新报告期，
+最大延迟一个交易日。相较方案本身省下的请求量，这一延迟可接受。
+
+**名称写入依赖利润表同步**：首次同步某只股票时利润表水位线为 NULL，
+探测结果必然「晚于」空水位线，故一定会拉取利润表并写入名称，不存在
+「新股票永远拿不到名称」的路径。
+
+**两张表各自门控，不共用一条水位线。** 日线水位线只决定「是否进入同步流程」；
+进入后，利润表还要再过一道自己的门。
+
+利润表是季度数据，若跟随日线水位线触发，每个交易日都会重拉一次
+（`ak.stock_profit_sheet_by_report_em` 实测 3.9s、内部 21 次分页请求），
+而拿回的数据完全相同。实测佐证：上游 SH600519 / SZ300308 / SH600036 当前
+最新报告期均为 2026-03-31（半年报尚未披露），而库中已有 3 只股票水位线
+正是 2026-03-31 —— 对这些股票按日线触发即 100% 纯浪费。
+
+**利润表门控采用轻量探测：**
+
+akshare 的 `stock_profit_sheet_by_report_em` 内部是「1 次请求取报告期列表
+（`lrbDateAjaxNew`）+ 20 次分页取数据」。因此可先单独请求报告期列表，
+仅当上游最新报告期晚于库中水位线时才拉全量。实测该请求 0.1s、
+返回完整报告期列表且最新项在首位，比日线接口（0.5s）还便宜。
+
+请求数由 21 降至 1。代价是直接耦合东财内部 endpoint、绕过 akshare 封装，
+该接口变更时需自行维护。发现新报告期的延迟见上文（最大一个交易日）。
 
 in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次异常会使该股票
 永久占位、再也不会同步。
@@ -183,8 +210,11 @@ in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次�
 两张表的复合主键即天然 upsert 键，改用 `INSERT ... ON DUPLICATE KEY UPDATE`，
 去掉 `delete_by_symbol` 调用。除实现增量外，另消除了全量替换的空窗期。
 
-备份事务内额外 upsert `stock_info` 的 `security_name_abbr`（取自利润表的
-`SECURITY_NAME_ABBR`），与数据写入同一事务。
+由于两张表现在各自门控、可独立触发，原先「一个事务写两张表」拆为两个独立事务：
+`sync_valuation()` 与 `sync_profit()`。`stock_info` 的 `security_name_abbr`
+（取自利润表的 `SECURITY_NAME_ABBR`）在 `sync_profit()` 的事务内一并 upsert。
+两者不再共享事务是可接受的：表之间无外键约束，且 upsert 幂等，
+任一侧失败重试即可收敛。
 
 ### 4.4 名称读取路径
 
@@ -205,11 +235,12 @@ in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次�
 | 新增 | `services/stock/trade_calendar.py` |
 | 新增 | `services/stock/stock_sync_coordinator.py` |
 | 新增 | `repositories/stock_info_repository.py` |
-| 改 | `services/stock/stock_backup_service.py` — upsert 化、事务内写 stock_info 名称、去掉 exists_by_symbol 短路 |
+| 新增 | `providers/profit_sheet/eastmoney_report_period_provider.py` — 轻量探测上游最新报告期（1 请求） |
+| 改 | `services/stock/stock_backup_service.py` — upsert 化、拆为 `sync_valuation()` / `sync_profit()`、事务内写 stock_info 名称、去掉 exists_by_symbol 短路 |
 | 改 | `services/stock/marked_stock_service.py` — 去掉 name provider 链，读写 stock_info |
 | 改 | `services/stock/stock_service.py` — `get_stock_name` 改查 stock_info，移除 `name_providers` |
 | 改 | `repositories/stock_value_daily_repository.py` — 列名 `symbol`→`security_code`，新增 `upsert_rows` |
-| 改 | `repositories/stock_profit_sheet_repository.py` — 新增 `upsert_rows` |
+| 改 | `repositories/stock_profit_sheet_repository.py` — 新增 `upsert_rows` 与 `latest_report_date`；移除 `exists_by_symbol` |
 | 改 | `providers/market_performance/database_market_performance_provider.py` — rename 映射同步列名 |
 | 改 | `tests/test_stock_value_daily_repository.py` — 跟随列名调整 |
 | 删 | `providers/name/`（整目录，含 2 个 provider 与 `__init__.py`） |
@@ -221,6 +252,7 @@ in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次�
 | 场景 | 处理 |
 |---|---|
 | 交易日历拉取失败 | 降级为只用一级工作日判定。宁可多拉一次，不因日历故障卡住更新 |
+| 报告期探测失败 | 视为「无法判断」，跳过本次利润表同步而非盲拉，避免故障时反而加压上游；日线同步不受影响，下个交易日重试 |
 | 备份线程抛异常 | 记日志，不影响主查询（本就异步）。in-flight 在 `finally` 中清理 |
 | 名称缺失（已标记但未拉过数据） | `security_name_abbr` 为 NULL，API 返回时临时回退为代号，**不写库**；备份完成后自动回填，源恢复即自愈 |
 | 数据库未配置 | 与现状一致：503 / 跳过同步 |
@@ -235,6 +267,10 @@ in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次�
 - `latest_workday`：周一至周日 7 个输入各断言一次
 - `is_stale`：水位线为 None / 恰等于最近工作日 / 落后数月 / 处于节假日窗口
 - **一级放行时不查日历**：mock 断言日历函数未被调用。这是两级门控的核心价值，必须锁死
+- 利润表门控：上游报告期等于库中水位线时**不得**触发全量拉取（mock 断言
+  `stock_profit_sheet_by_report_em` 未被调用）——这是本节门控的核心价值
+- 利润表水位线为 NULL（新股票）时必须触发拉取，保证名称能写入
+- 探测失败时跳过利润表同步，且不影响日线同步
 
 **集成测试（需 DB）**
 
@@ -250,4 +286,4 @@ in-flight 集合用锁保护；**清理必须在 `finally` 中**，否则一次�
 - 不改动 `stock_profit_sheet` 表结构与数据
 - 不迁移 `stock_marked` 与 `stock_value_daily` 的旧数据，直接丢弃
   （`stock_info` 的名称列例外：由 `stock_profit_sheet` 现有数据播种，见 3.1）
-- 不为利润表单独维护 `report_date` 水位线（见 4.2）
+- 不用「法定披露截止日」做利润表的本地判定（改用轻量探测，见 4.2）
