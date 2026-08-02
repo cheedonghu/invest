@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator
+from backend.app.services.stock.stock_sync_coordinator import get_default_coordinator
 
 
 router = APIRouter(prefix="/api/ops", tags=["ops"])
 
-sync_coordinator = StockSyncCoordinator()
+sync_coordinator = get_default_coordinator()
 
 
 @router.post("/sync/valuation")

@@ -11,7 +11,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from fastapi import HTTPException
 
-from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator
+from backend.app.services.stock.marked_stock_service import MarkedStockService
+from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator, get_default_coordinator
 
 
 class FakeBackupService:
@@ -37,7 +38,11 @@ class FakeCalendar:
 
 
 class FakeValueRepo:
+    def __init__(self) -> None:
+        self.calls = 0
+
     def latest_trade_date(self, security_code: str):
+        self.calls += 1
         return date(2026, 3, 20)
 
 
@@ -148,6 +153,50 @@ class InFlightTestCase(unittest.TestCase):
             coordinator.force_sync_valuation("600519")
         self.assertTrue(coordinator._acquire("600519"), "异常后槽位必须已释放")
         coordinator._release("600519")
+
+
+class ThrottleTestCase(unittest.TestCase):
+    def test_second_run_sync_within_cooldown_touches_nothing(self) -> None:
+        """连续两次 run_sync 同一 code，第二次必须在查水位线之前就短路。"""
+        coordinator, backup, provider = build(stale=True)
+
+        coordinator.run_sync("600519")
+        self.assertEqual(backup.valuation_calls, ["600519"])
+        self.assertEqual(coordinator.value_repository.calls, 1)
+
+        coordinator.run_sync("600519")
+        self.assertEqual(
+            backup.valuation_calls, ["600519"], "冷却期内不应再次拉取估值"
+        )
+        self.assertEqual(
+            coordinator.value_repository.calls, 1, "冷却期内不应再查水位线"
+        )
+        self.assertEqual(provider.calls, 1, "冷却期内不应再探测报告期")
+
+    def test_force_sync_is_not_throttled(self) -> None:
+        """force_sync_* 走 _force，不受冷却影响，必须每次真跑。"""
+        coordinator, backup, _ = build(stale=True)
+
+        coordinator.run_sync("600519")
+        coordinator.force_sync_valuation("600519")
+
+        self.assertEqual(backup.valuation_calls, ["600519", "600519"])
+
+
+class DefaultCoordinatorSingletonTestCase(unittest.TestCase):
+    def test_get_default_coordinator_is_a_singleton(self) -> None:
+        self.assertIs(get_default_coordinator(), get_default_coordinator())
+
+    def test_stock_service_and_marked_stock_service_share_default_coordinator(self) -> None:
+        """in-flight 去重要跨 controller 生效，前提是三处调用方共用同一实例。"""
+        from backend.app.services.stock.stock_service import StockService
+
+        default_coordinator = get_default_coordinator()
+        marked_service = MarkedStockService()
+        stock_service = StockService()
+
+        self.assertIs(marked_service.coordinator, default_coordinator)
+        self.assertIs(stock_service.sync_coordinator, default_coordinator)
 
 
 if __name__ == "__main__":

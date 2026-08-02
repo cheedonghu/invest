@@ -65,17 +65,6 @@ class UpsertMarkedStockTestCase(unittest.TestCase):
         self.assertEqual(coordinator.maybe_sync_calls, ["600036"])
         self.assertEqual(repository.upsert_name_calls, [])
 
-    def test_explicit_name_is_written_and_sync_not_triggered(self) -> None:
-        """调用方显式传 name 时应直接落库，不需要触发同步。"""
-        repository = FakeRepository()
-        coordinator = FakeCoordinator()
-        service = MarkedStockService(repository=repository, coordinator=coordinator)
-
-        service.upsert_marked_stock("600036", "价格30左右再入手", name="招商银行")
-
-        self.assertEqual(repository.upsert_name_calls, [("600036", "招商银行")])
-        self.assertEqual(coordinator.maybe_sync_calls, [])
-
 
 class SerializeRowTestCase(unittest.TestCase):
     def test_missing_name_falls_back_to_symbol_without_writing(self) -> None:

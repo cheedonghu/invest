@@ -13,7 +13,6 @@ marked_stock_service = MarkedStockService()
 class UpsertMarkedStockRequest(BaseModel):
     symbol: str = Field(..., description="6-digit A-share stock code")
     mark_reason: str = Field(..., description="Reason for marking the stock")
-    name: str | None = Field(default=None, description="Optional stock name")
 
 
 @router.get("/")
@@ -26,6 +25,5 @@ def upsert_marked_stock(payload: UpsertMarkedStockRequest) -> dict:
     return marked_stock_service.upsert_marked_stock(
         symbol=payload.symbol,
         mark_reason=payload.mark_reason,
-        name=payload.name,
     )
 

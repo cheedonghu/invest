@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from datetime import date
-from typing import Any
+from typing import Any, Callable
 
 from fastapi import HTTPException
 
@@ -26,6 +27,10 @@ class StockSyncCoordinator:
     再把水位线查询与门控判定全部交给后台线程，避免拖慢接口响应。
     """
 
+    #: 同一 code 连续两次惰性同步尝试之间的最短间隔（秒）。挡的是
+    #: 「刚试过又立刻再试」，不是并发——并发由 in-flight 槽位负责。
+    _ATTEMPT_COOLDOWN_SECONDS = 300
+
     def __init__(
         self,
         backup_service: StockBackupService | None = None,
@@ -41,6 +46,7 @@ class StockSyncCoordinator:
         self.period_provider = period_provider or EastmoneyReportPeriodProvider()
         self._in_flight: set[str] = set()
         self._lock = threading.Lock()
+        self._last_attempt_at: dict[str, float] = {}
 
     # ---- in-flight 去重 ----
 
@@ -82,8 +88,25 @@ class StockSyncCoordinator:
         finally:
             self._release(security_code)
 
+    def _should_attempt(self, security_code: str) -> bool:
+        """节流：同一 code 冷却期内的重复尝试直接拒绝，并顺带记录本次尝试时间。
+
+        与 in-flight 用同一把锁，语义上都是「调度决策，不做 I/O」。
+        """
+        now = time.monotonic()
+        with self._lock:
+            last = self._last_attempt_at.get(security_code)
+            if last is not None and now - last < self._ATTEMPT_COOLDOWN_SECONDS:
+                return False
+            self._last_attempt_at[security_code] = now
+            return True
+
     def run_sync(self, security_code: str) -> None:
         """门控 + 拉取。同步执行，不涉及 in-flight 槽位管理。"""
+        if not self._should_attempt(security_code):
+            logger.info("Sync attempted too recently for %s, skip (cooldown)", security_code)
+            return
+
         today = date.today()
         watermark = self.value_repository.latest_trade_date(security_code)
         if not self.calendar.is_stale(watermark, today):
@@ -123,7 +146,7 @@ class StockSyncCoordinator:
     def force_sync_profit(self, security_code: str) -> dict[str, Any]:
         return self._force(security_code, self.backup_service.sync_profit)
 
-    def _force(self, security_code: str, action) -> dict[str, Any]:
+    def _force(self, security_code: str, action: Callable[[str], dict[str, Any]]) -> dict[str, Any]:
         if not self._acquire(security_code):
             raise HTTPException(
                 status_code=409,
@@ -133,3 +156,16 @@ class StockSyncCoordinator:
             return action(security_code)
         finally:
             self._release(security_code)
+
+
+_default_coordinator: StockSyncCoordinator | None = None
+_default_coordinator_lock = threading.Lock()
+
+
+def get_default_coordinator() -> StockSyncCoordinator:
+    """进程内共享的协调器。in-flight 去重依赖所有调用方共用同一实例。"""
+    global _default_coordinator
+    with _default_coordinator_lock:
+        if _default_coordinator is None:
+            _default_coordinator = StockSyncCoordinator()
+        return _default_coordinator

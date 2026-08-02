@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from backend.app.repositories.stock_info_repository import StockInfoRepository
-from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator
+from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator, get_default_coordinator
 
 
 class MarkedStockService:
@@ -17,27 +17,23 @@ class MarkedStockService:
         coordinator: StockSyncCoordinator | None = None,
     ) -> None:
         self.repository = repository or StockInfoRepository()
-        self.coordinator = coordinator or StockSyncCoordinator()
+        self.coordinator = coordinator or get_default_coordinator()
 
     def list_marked_stocks(self) -> dict[str, Any]:
         self._ensure_database_available()
         items = [self._serialize_row(row) for row in self.repository.fetch_marked()]
         return {"count": len(items), "items": items}
 
-    def upsert_marked_stock(self, symbol: str, mark_reason: str, name: str | None = None) -> dict[str, Any]:
+    def upsert_marked_stock(self, symbol: str, mark_reason: str) -> dict[str, Any]:
         self._ensure_database_available()
         security_code = self.normalize_symbol(symbol)
         normalized_reason = self.normalize_reason(mark_reason)
 
         self.repository.upsert_mark_reason(security_code, normalized_reason)
 
-        # 名称由备份流程写入。若调用方显式给了名称则直接采用，
-        # 否则触发一次同步，名称会随利润表一并落库。
-        explicit_name = (name or "").strip()
-        if explicit_name:
-            self.repository.upsert_name(security_code, explicit_name)
-        else:
-            self.coordinator.maybe_sync(security_code)
+        # 名称是备份流程的副产品，本层不接受也不写任何调用方传入的名称。
+        # 标记后触发一次惰性同步，名称会随利润表一并落库。
+        self.coordinator.maybe_sync(security_code)
 
         row = self.repository.fetch_by_code(security_code)
         if row is None:

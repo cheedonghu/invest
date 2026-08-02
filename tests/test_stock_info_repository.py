@@ -10,7 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.app.repositories.stock_info_repository import StockInfoRepository
 
-TEST_CODE = "000001"
+TEST_CODE = "999901"
 
 
 class StockInfoRepositoryTestCase(unittest.TestCase):

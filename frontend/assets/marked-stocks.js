@@ -106,13 +106,13 @@ async function fetchMarkedStocks() {
   }
 }
 
-async function upsertMarkedStock({ symbol, mark_reason, name }, successMessage) {
+async function upsertMarkedStock({ symbol, mark_reason }, successMessage) {
   const response = await fetch("/api/stocks/marked/", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ symbol, mark_reason, name }),
+    body: JSON.stringify({ symbol, mark_reason }),
   });
   const payload = await response.json();
   if (!response.ok) {

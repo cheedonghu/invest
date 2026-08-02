@@ -22,7 +22,7 @@ from backend.app.repositories.stock_info_repository import StockInfoRepository
 from backend.app.repositories.stock_profit_sheet_repository import StockProfitSheetRepository
 from backend.app.repositories.stock_value_daily_repository import StockValueDailyRepository
 from backend.app.services.stock.balance_sheet_aggregation_service import BalanceSheetAggregationService
-from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator
+from backend.app.services.stock.stock_sync_coordinator import get_default_coordinator
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class StockService:
         ]
         self.balance_sheet_aggregation_service = BalanceSheetAggregationService()
         self.stock_info_repository = StockInfoRepository()
-        self.sync_coordinator = StockSyncCoordinator()
+        self.sync_coordinator = get_default_coordinator()
 
     def get_stock_name(self, symbol: str) -> dict[str, Any]:
         normalized_symbol = self.normalize_symbol(symbol)
@@ -304,82 +304,6 @@ class StockService:
         ]
 
         return {"label": "\u5e02\u503c\u4e0e\u4e1a\u7ee9\u5b63\u5ea6\u8d8b\u52bf", "latest": series[-1], "series": series}
-
-    def _normalize_stock_value_daily_rows(self, raw_df: pd.DataFrame, symbol: str) -> list[dict[str, Any]]:
-        date_col = self._find_column(raw_df, ["\u6570\u636e\u65e5\u671f", "date", "trade_date"])
-        close_col = self._find_column(raw_df, ["\u5f53\u65e5\u6536\u76d8\u4ef7", "close_price"])
-        pct_change_col = self._find_column(raw_df, ["\u5f53\u65e5\u6da8\u8dcc\u5e45", "pct_change"])
-        total_market_value_col = self._find_column(raw_df, ["\u603b\u5e02\u503c", "total_market_value"])
-        float_market_value_col = self._find_column(raw_df, ["\u6d41\u901a\u5e02\u503c", "float_market_value"])
-        total_shares_col = self._find_column(raw_df, ["\u603b\u80a1\u672c", "total_shares"])
-        float_shares_col = self._find_column(raw_df, ["\u6d41\u901a\u80a1\u672c", "float_shares"])
-        pe_ttm_col = self._find_column(raw_df, ["PE(TTM)", "pe_ttm"])
-        pe_static_col = self._find_column(raw_df, ["PE(\u9759)", "pe_static"])
-        pb_col = self._find_column(raw_df, ["\u5e02\u51c0\u7387", "pb"])
-        peg_col = self._find_column(raw_df, ["PEG\u503c", "peg"])
-        pcf_col = self._find_column(raw_df, ["\u5e02\u73b0\u7387", "pcf"])
-        ps_col = self._find_column(raw_df, ["\u5e02\u9500\u7387", "ps"])
-
-        cleaned = raw_df[
-            [
-                date_col,
-                close_col,
-                pct_change_col,
-                total_market_value_col,
-                float_market_value_col,
-                total_shares_col,
-                float_shares_col,
-                pe_ttm_col,
-                pe_static_col,
-                pb_col,
-                peg_col,
-                pcf_col,
-                ps_col,
-            ]
-        ].copy()
-        cleaned.columns = [
-            "trade_date",
-            "close_price",
-            "pct_change",
-            "total_market_value",
-            "float_market_value",
-            "total_shares",
-            "float_shares",
-            "pe_ttm",
-            "pe_static",
-            "pb",
-            "peg",
-            "pcf",
-            "ps",
-        ]
-        cleaned["trade_date"] = self._normalize_datetime_key(cleaned["trade_date"]).dt.date
-        for column in cleaned.columns:
-            if column == "trade_date":
-                continue
-            cleaned[column] = pd.to_numeric(cleaned[column], errors="coerce")
-        cleaned = cleaned.dropna(subset=["trade_date"]).sort_values("trade_date").reset_index(drop=True)
-
-        rows: list[dict[str, Any]] = []
-        for row in cleaned.itertuples(index=False):
-            rows.append(
-                {
-                    "symbol": symbol,
-                    "trade_date": row.trade_date,
-                    "close_price": None if pd.isna(row.close_price) else float(row.close_price),
-                    "pct_change": None if pd.isna(row.pct_change) else float(row.pct_change),
-                    "total_market_value": None if pd.isna(row.total_market_value) else float(row.total_market_value),
-                    "float_market_value": None if pd.isna(row.float_market_value) else float(row.float_market_value),
-                    "total_shares": None if pd.isna(row.total_shares) else int(float(row.total_shares)),
-                    "float_shares": None if pd.isna(row.float_shares) else int(float(row.float_shares)),
-                    "pe_ttm": None if pd.isna(row.pe_ttm) else float(row.pe_ttm),
-                    "pe_static": None if pd.isna(row.pe_static) else float(row.pe_static),
-                    "pb": None if pd.isna(row.pb) else float(row.pb),
-                    "peg": None if pd.isna(row.peg) else float(row.peg),
-                    "pcf": None if pd.isna(row.pcf) else float(row.pcf),
-                    "ps": None if pd.isna(row.ps) else float(row.ps),
-                }
-            )
-        return rows
 
     def _extract_latest_available_date(self, raw_df: pd.DataFrame) -> str | None:
         date_col = self._find_column(raw_df, ["\u6570\u636e\u65e5\u671f", "date", "trade_date"])

@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.app.repositories.stock_value_daily_repository import StockValueDailyRepository
 
-TEST_CODE = "000002"
+TEST_CODE = "999902"
 
 
 def _row(trade_date: date, close_price: float) -> dict:

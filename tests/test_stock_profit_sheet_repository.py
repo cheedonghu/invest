@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.app.repositories.stock_profit_sheet_repository import StockProfitSheetRepository
 
-TEST_CODE = "000003"
+TEST_CODE = "999903"
 
 
 def _row(report_date: date, netprofit: float) -> dict:
