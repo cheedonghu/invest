@@ -23,8 +23,8 @@ from backend.app.providers.valuation.database_valuation_provider import Database
 from backend.app.providers.valuation.eastmoney_valuation_provider import EastmoneyValuationProvider
 from backend.app.repositories.stock_profit_sheet_repository import StockProfitSheetRepository
 from backend.app.repositories.stock_value_daily_repository import StockValueDailyRepository
-from backend.app.services.balance_sheet_aggregation_service import BalanceSheetAggregationService
-from backend.app.services.stock_backup_service import StockBackupService
+from backend.app.services.stock.balance_sheet_aggregation_service import BalanceSheetAggregationService
+from backend.app.services.stock.stock_backup_service import StockBackupService
 
 
 logger = logging.getLogger(__name__)
@@ -497,3 +497,4 @@ class StockService:
             if key in normalized:
                 return normalized[key]
         raise HTTPException(status_code=500, detail=f"unable to recognize dataframe columns: {list(df.columns)!r}")
+

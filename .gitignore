@@ -1,5 +1,6 @@
 database.toml
 backend/app/config/config.toml
 .vscode
+.claude
 __pycache__/
 *.pyc

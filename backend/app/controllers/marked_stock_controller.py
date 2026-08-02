@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 from fastapi import APIRouter
 
-from backend.app.services.marked_stock_service import MarkedStockService
+from backend.app.services.stock.marked_stock_service import MarkedStockService
 
 
 router = APIRouter(prefix="/api/stocks/marked", tags=["marked-stocks"])
@@ -28,3 +28,4 @@ def upsert_marked_stock(payload: UpsertMarkedStockRequest) -> dict:
         mark_reason=payload.mark_reason,
         name=payload.name,
     )
+
