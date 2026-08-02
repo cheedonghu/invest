@@ -12,19 +12,17 @@ from backend.app.providers.balance_sheet.sina_balance_sheet_provider import Sina
 from backend.app.providers.interfaces.stock_provider import (
     BalanceSheetProvider,
     MarketPerformanceProvider,
-    StockNameProvider,
     ValuationMetricsProvider,
 )
 from backend.app.providers.market_performance.database_market_performance_provider import DatabaseMarketPerformanceProvider
 from backend.app.providers.market_performance.eastmoney_market_performance_provider import EastmoneyMarketPerformanceProvider
-from backend.app.providers.name.eastmoney_individual_info_name_provider import EastmoneyIndividualInfoNameProvider
-from backend.app.providers.name.xueqiu_individual_info_name_provider import XueqiuIndividualInfoNameProvider
 from backend.app.providers.valuation.database_valuation_provider import DatabaseValuationProvider
 from backend.app.providers.valuation.eastmoney_valuation_provider import EastmoneyValuationProvider
+from backend.app.repositories.stock_info_repository import StockInfoRepository
 from backend.app.repositories.stock_profit_sheet_repository import StockProfitSheetRepository
 from backend.app.repositories.stock_value_daily_repository import StockValueDailyRepository
 from backend.app.services.stock.balance_sheet_aggregation_service import BalanceSheetAggregationService
-from backend.app.services.stock.stock_backup_service import StockBackupService
+from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinator
 
 
 logger = logging.getLogger(__name__)
@@ -43,21 +41,26 @@ class StockService:
             DatabaseMarketPerformanceProvider(self.stock_value_daily_repository, self.stock_profit_sheet_repository),
             EastmoneyMarketPerformanceProvider(),
         ]
-        self.name_providers: list[StockNameProvider] = [
-            XueqiuIndividualInfoNameProvider(),
-            EastmoneyIndividualInfoNameProvider(),
-        ]
         self.balance_sheet_aggregation_service = BalanceSheetAggregationService()
-        self.stock_backup_service = StockBackupService()
+        self.stock_info_repository = StockInfoRepository()
+        self.sync_coordinator = StockSyncCoordinator()
 
     def get_stock_name(self, symbol: str) -> dict[str, Any]:
         normalized_symbol = self.normalize_symbol(symbol)
-        self.stock_backup_service.trigger_profit_sheet_sync_async(normalized_symbol)
-        name, source = self._fetch_name_with_failover(normalized_symbol)
-        return {"symbol": normalized_symbol, "name": name, "source": source}
+        self.sync_coordinator.maybe_sync(normalized_symbol)
+
+        row = self.stock_info_repository.fetch_by_code(normalized_symbol)
+        name = str((row or {}).get("security_name_abbr") or "").strip()
+        if name:
+            return {"symbol": normalized_symbol, "name": name, "source": "stock_info"}
+
+        # 名称尚未落库（首次查询该股票），临时回退为代号，不写库。
+        # 上面已触发同步，名称会在备份完成后补齐。
+        return {"symbol": normalized_symbol, "name": normalized_symbol, "source": "fallback"}
 
     def get_stock_valuation_metrics(self, symbol: str, years: int = 10) -> dict[str, Any]:
         normalized_symbol = self.normalize_symbol(symbol)
+        self.sync_coordinator.maybe_sync(normalized_symbol)
         if years <= 0:
             raise HTTPException(status_code=400, detail="years must be a positive integer")
 
@@ -83,6 +86,7 @@ class StockService:
 
     def get_stock_market_performance(self, symbol: str, years: int = 10) -> dict[str, Any]:
         normalized_symbol = self.normalize_symbol(symbol)
+        self.sync_coordinator.maybe_sync(normalized_symbol)
         if years <= 0:
             raise HTTPException(status_code=400, detail="years must be a positive integer")
 
@@ -122,21 +126,6 @@ class StockService:
         if len(cleaned) != 6:
             raise HTTPException(status_code=400, detail="symbol must be a 6-digit A-share stock code")
         return cleaned
-
-    def _fetch_name_with_failover(self, symbol: str) -> tuple[str, str]:
-        errors: list[str] = []
-        for provider in self.name_providers:
-            try:
-                return provider.fetch(symbol), provider.source_name
-            except Exception as exc:
-                logger.warning(
-                    "Stock name provider %s failed for symbol=%s: %s",
-                    getattr(provider, "source_name", provider.__class__.__name__),
-                    symbol,
-                    exc,
-                )
-                errors.append(f"{getattr(provider, 'source_name', provider.__class__.__name__)} failed: {exc}")
-        raise HTTPException(status_code=502, detail="stock name fetch failed. " + " | ".join(errors))
 
     def _fetch_with_failover(self, symbol: str, providers: list[Any], metric_name: str) -> pd.DataFrame:
         errors: list[str] = []
