@@ -1,90 +1,153 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>&#24050;&#26631;&#35760;&#32929;&#31080;</title>
+    <meta name="color-scheme" content="light" />
+    <title>研究备注 · 投资研究手记</title>
     <link rel="stylesheet" href="/assets/style.css" />
   </head>
-  <body>
+  <body class="marked-page">
     <main class="page-shell">
-      <nav class="top-nav">
-        <a class="nav-link" href="/">&#20272;&#20540;&#20998;&#26512;</a>
-        <a class="nav-link" href="/balance-sheet">&#36164;&#20135;&#36127;&#20538;&#34920;</a>
-        <a class="nav-link" href="/valuation">&#36164;&#20135;&#20272;&#20540;</a>
-        <a class="nav-link active" href="/marked-stocks">&#24050;&#26631;&#35760;&#32929;&#31080;</a>
-      </nav>
-
-      <section class="hero-card marked-hero">
+      <header class="site-header">
+        <a class="site-brand" href="/"
+          >投资研究手记<span>INVESTMENT NOTES</span></a
+        >
+        <nav class="top-nav" aria-label="主导航">
+          <a class="nav-link" href="/">估值分析</a>
+          <a class="nav-link" href="/balance-sheet">资产负债表</a>
+          <a class="nav-link" href="/valuation">资产估值</a>
+          <a class="nav-link active" href="/marked-stocks" aria-current="page"
+            >股票标记</a
+          >
+        </nav>
+      </header>
+      <div class="notebook-heading">
         <div>
-          <p class="eyebrow">Marked Stocks</p>
-          <h1>&#20851;&#27880;&#32929;&#31080;&#28165;&#21333;</h1>
-          <p class="hero-copy">
-            &#25226;&#24819;&#36319;&#36394;&#30340; A &#32929;&#26631;&#35760;&#19979;&#26469;&#65292;&#32479;&#19968;&#35760;&#24405;&#21517;&#31216;&#12289;&#26631;&#35760;&#21407;&#22240;&#12289;&#21019;&#24314;&#26102;&#38388;&#21644;&#26368;&#26032;&#26356;&#26032;&#26102;&#38388;&#12290;
-          </p>
+          <p class="eyebrow">我的研究 / 关注清单</p>
+          <h1>研究备注</h1>
+          <p class="hero-copy">把每次判断留下来，等下一次回看。</p>
         </div>
-        <div class="stat-grid">
-          <article class="stat-card">
-            <span>&#24050;&#26631;&#35760;&#25968;&#37327;</span>
-            <strong id="marked-count">-</strong>
-          </article>
-          <article class="stat-card">
-            <span>&#26368;&#26032;&#26356;&#26032;</span>
-            <strong id="marked-latest-updated">-</strong>
-          </article>
-        </div>
-      </section>
-
-      <section class="panel-card">
-        <div class="panel-header panel-controls">
-          <div>
-            <h2>&#26032;&#22686;&#25110;&#26356;&#26032;&#26631;&#35760;</h2>
-            <p>&#22914;&#26524;&#32929;&#31080;&#24050;&#32463;&#23384;&#22312;&#65292;&#20250;&#30452;&#25509;&#21512;&#24182;&#26356;&#26032;&#21407;&#22240;&#21644;&#26356;&#26032;&#26102;&#38388;&#65292;&#20445;&#30041;&#39318;&#27425;&#21019;&#24314;&#26102;&#38388;&#12290;</p>
+        <button id="marked-new-btn" type="button">＋ 新增备注</button>
+      </div>
+      <p
+        id="marked-feedback"
+        class="form-feedback"
+        role="status"
+        aria-live="polite"
+      ></p>
+      <div class="notebook-layout">
+        <aside class="notebook-index" aria-label="关注清单">
+          <div class="notebook-index-heading">
+            <h2>
+              关注清单 <span id="marked-count" class="count-label">—</span>
+            </h2>
+            <button id="marked-refresh-btn" type="button" class="text-btn">
+              刷新
+            </button>
           </div>
-          <form id="marked-stock-form" class="stock-form">
-            <label class="stock-input-group" for="marked-symbol">
-              <span>&#32929;&#31080;&#20195;&#30721;</span>
-              <input id="marked-symbol" name="symbol" type="text" inputmode="numeric" maxlength="6" placeholder="&#20363;&#22914; 600036" />
-            </label>
-            <label class="stock-input-group stock-reason-group" for="marked-reason">
-              <span>&#26631;&#35760;&#21407;&#22240;</span>
-              <input id="marked-reason" name="mark-reason" type="text" maxlength="120" placeholder="&#20363;&#22914; &#20272;&#20540;&#21306;&#38388;&#26377;&#21560;&#24341;&#21147;" />
-            </label>
-            <div class="stock-action-group">
-              <button id="marked-save-btn" type="submit">&#20445;&#23384;&#26631;&#35760;</button>
-              <button id="marked-refresh-btn" type="button" class="secondary-btn">&#21047;&#26032;&#21015;&#34920;</button>
-            </div>
-          </form>
-          <p id="marked-feedback" class="form-feedback" aria-live="polite"></p>
-        </div>
-      </section>
-
-      <section class="panel-card">
-        <div class="panel-header">
-          <div>
-            <h2>&#26631;&#35760;&#21015;&#34920;</h2>
-            <p>&#21487;&#30452;&#25509;&#22312;&#34892;&#20869;&#20462;&#25913;&#26631;&#35760;&#21407;&#22240;&#12290;</p>
+          <details id="marked-directory" open>
+            <summary id="marked-directory-summary">选择一家公司</summary>
+            <label class="sr-only" for="marked-search"
+              >搜索股票代码、名称或备注</label
+            >
+            <input
+              id="marked-search"
+              type="search"
+              placeholder="查找代码、公司或备注"
+              autocomplete="off"
+            />
+            <label class="sr-only" for="marked-sort">排列顺序</label>
+            <select id="marked-sort">
+              <option value="updated">最近更新优先</option>
+              <option value="created">最近添加优先</option>
+              <option value="symbol">股票代码升序</option>
+              <option value="name">股票名称升序</option>
+            </select>
+            <p
+              id="marked-result-count"
+              class="index-caption"
+              aria-live="polite"
+            >
+              正在加载…
+            </p>
+            <div
+              id="marked-list"
+              class="stock-directory"
+              aria-busy="true"
+            ></div>
+            <div id="marked-empty" class="empty-state" hidden></div>
+          </details>
+          <p class="index-footnote">先记录，再验证。</p>
+        </aside>
+        <section
+          id="marked-detail"
+          class="notebook-document"
+          aria-label="股票备注"
+          aria-busy="true"
+        >
+          <div class="document-empty">
+            <p class="eyebrow">研究手记</p>
+            <h2>正在打开你的备注…</h2>
           </div>
+        </section>
+      </div>
+      <dialog
+        id="marked-add-dialog"
+        class="note-dialog"
+        aria-labelledby="marked-dialog-title"
+      >
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">记录一个投资想法</p>
+            <h2 id="marked-dialog-title">新增研究备注</h2>
+          </div>
+          <button
+            id="marked-dialog-close"
+            type="button"
+            class="text-btn"
+            aria-label="关闭新增备注窗口"
+          >
+            关闭
+          </button>
         </div>
-        <div id="marked-empty" class="empty-state" hidden>&#26242;&#26102;&#27809;&#26377;&#24050;&#26631;&#35760;&#30340;&#32929;&#31080;&#12290;</div>
-        <div class="marked-table-wrap">
-          <table class="marked-table">
-            <thead>
-              <tr>
-                <th>&#32929;&#31080;&#20195;&#30721;</th>
-                <th>&#21517;&#31216;</th>
-                <th>&#26631;&#35760;&#21407;&#22240;</th>
-                <th>&#21019;&#24314;&#26102;&#38388;</th>
-                <th>&#26356;&#26032;&#26102;&#38388;</th>
-                <th>&#25805;&#20316;</th>
-              </tr>
-            </thead>
-            <tbody id="marked-table-body"></tbody>
-          </table>
-        </div>
-      </section>
+        <p class="dialog-copy">
+          输入股票代码，记录你的判断。已有股票会更新为本次备注。
+        </p>
+        <form id="marked-stock-form">
+          <label class="stock-input-group" for="marked-symbol"
+            ><span>股票代码</span
+            ><input
+              id="marked-symbol"
+              name="symbol"
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              pattern="[0-9]{6}"
+              required
+              autocomplete="off"
+              placeholder="例如 600036"
+          /></label>
+          <div class="stock-input-group">
+            <label for="marked-reason">备注</label>
+            <div id="marked-note-editor"></div>
+          </div>
+          <p
+            id="marked-dialog-feedback"
+            class="form-feedback"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <div class="dialog-actions">
+            <span>支持 Markdown，原文保存。</span
+            ><button id="marked-save-btn" type="submit">保存备注</button>
+          </div>
+        </form>
+      </dialog>
     </main>
-
+    <script src="/assets/vendor/marked-18.1.1.umd.js"></script>
+    <script src="/assets/vendor/purify-3.4.17.min.js"></script>
+    <script src="/assets/stock-notes.js"></script>
     <script src="/assets/marked-stocks.js"></script>
   </body>
 </html>

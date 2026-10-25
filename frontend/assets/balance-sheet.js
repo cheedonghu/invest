@@ -27,7 +27,7 @@ const submitButton = document.getElementById("balance-submit-btn");
 const prevButton = document.getElementById("prev-period-btn");
 const currentButton = document.getElementById("current-period-btn");
 const nextButton = document.getElementById("next-period-btn");
-const chart = echarts.init(document.getElementById("balance-chart"));
+const chart = echarts.init(document.getElementById("balance-chart"), "paper-notebook");
 
 let currentPayload = null;
 let currentNamePayload = null;
@@ -77,12 +77,12 @@ function formatYi(value) {
 
 function formatDetails(details = []) {
   if (!details.length) {
-    return `<span style="color:#9fb0d6">${UI_TEXT.noDetails}</span>`;
+    return `<span style="color:#6f7769">${UI_TEXT.noDetails}</span>`;
   }
 
   return details
     .map((detail) => {
-      const suffix = detail.included_in_total ? "" : ` <span style="color:#fbbf24">(${UI_TEXT.displayOnly})</span>`;
+      const suffix = detail.included_in_total ? "" : ` <span style="color:#8a6e3e">(${UI_TEXT.displayOnly})</span>`;
       return `${escapeHtml(detail.label)}: ${formatYi(detail.value)}${suffix}`;
     })
     .join("<br/>");
@@ -136,7 +136,7 @@ function renderError(message) {
       left: "center",
       top: "middle",
       textStyle: {
-        color: "#fca5a5",
+        color: "#a4574d",
         fontSize: 16,
       },
     },
@@ -172,6 +172,7 @@ function renderChart(period) {
   const liabilitiesTotal = period.liabilities_total ?? period.liabilities.reduce((sum, item) => sum + item.value, 0);
   const stockDisplay = buildStockLabel(currentPayload.symbol, currentNamePayload);
   const stockTitle = `${stockDisplay} ${UI_TEXT.balanceSheet}`;
+  const compact = chart.getWidth() < 720;
 
   stockNameElement.textContent = stockDisplay;
   reportDateElement.textContent = period.report_date;
@@ -182,17 +183,17 @@ function renderChart(period) {
   chart.setOption({
     backgroundColor: "transparent",
     title: {
-      text: stockTitle,
+      text: compact ? "资产与负债结构" : stockTitle,
       subtext: period.report_date,
       left: "center",
       top: 8,
       textStyle: {
-        color: "#f8fafc",
-        fontSize: 24,
-        fontWeight: 700,
+        color: "#343b35",
+        fontSize: compact ? 15 : 20,
+        fontWeight: 500,
       },
       subtextStyle: {
-        color: "#9fb0d6",
+        color: "#6f7769",
         fontSize: 16,
       },
     },
@@ -210,7 +211,7 @@ function renderChart(period) {
         const lines = [
           `<strong>${escapeHtml(activeItem.data.itemLabel || activeItem.axisValue)}</strong>`,
           `${activeItem.marker}${activeItem.seriesName}: ${formatYi(activeItem.data.value)}`,
-          `<span style="color:#9fb0d6">${UI_TEXT.detail}</span>`,
+          `<span style="color:#6f7769">${UI_TEXT.detail}</span>`,
           formatDetails(activeItem.data.details),
         ];
         return lines.join("<br/>");
@@ -226,7 +227,7 @@ function renderChart(period) {
       type: "category",
       data: labels,
       axisLabel: {
-        color: "#dbe4ff",
+        color: "#4d574b",
         interval: 0,
         rotate: 0,
         formatter(value) {
@@ -235,7 +236,7 @@ function renderChart(period) {
       },
       axisLine: {
         lineStyle: {
-          color: "rgba(159, 176, 214, 0.35)",
+          color: "rgba(111, 119, 105, 0.35)",
         },
       },
     },
@@ -243,11 +244,11 @@ function renderChart(period) {
       type: "value",
       name: UI_TEXT.yiYuan,
       axisLabel: {
-        color: "#9fb0d6",
+        color: "#6f7769",
       },
       splitLine: {
         lineStyle: {
-          color: "rgba(159, 176, 214, 0.12)",
+          color: "rgba(111, 119, 105, 0.15)",
         },
       },
     },
@@ -258,13 +259,13 @@ function renderChart(period) {
         data: assetValues,
         barWidth: 18,
         itemStyle: {
-          color: "#4f9cf7",
+          color: "#677c91",
           borderRadius: [6, 6, 0, 0],
         },
         label: {
           show: true,
           position: "top",
-          color: "#dbe4ff",
+          color: "#4d574b",
           formatter: ({ value }) => (value ? Number(value).toFixed(2) : ""),
         },
       },
@@ -274,13 +275,13 @@ function renderChart(period) {
         data: liabilityValues,
         barWidth: 18,
         itemStyle: {
-          color: "#ff5b3a",
+          color: "#b57a5d",
           borderRadius: [6, 6, 0, 0],
         },
         label: {
           show: true,
           position: "top",
-          color: "#ffd2ca",
+          color: "#85604d",
           formatter: ({ value }) => (value ? Number(value).toFixed(2) : ""),
         },
       },
@@ -390,5 +391,9 @@ nextButton.addEventListener("click", () => {
   }
 });
 
-window.addEventListener("resize", () => chart.resize());
+window.addEventListener("resize", () => {
+  const wasCompact = chart.getWidth() < 720;
+  chart.resize();
+  if (wasCompact !== (chart.getWidth() < 720) && currentPayload?.periods.length) renderCurrentPeriod();
+});
 loadBalanceSheet(new URLSearchParams(window.location.search).get("symbol") || readLastSymbol() || symbolInput.value, yearsInput.value);

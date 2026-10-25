@@ -13,7 +13,7 @@
 CREATE TABLE IF NOT EXISTS stock_info (
   security_code       VARCHAR(10)  NOT NULL,
   security_name_abbr  VARCHAR(50)  NULL,
-  mark_reason         VARCHAR(500) NULL,
+  mark_reason         MEDIUMTEXT NULL COMMENT '股票备注（Markdown 原文）',
   created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (security_code)

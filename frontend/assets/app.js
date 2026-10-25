@@ -15,8 +15,7 @@ const uiText = {
   query: "\u67e5\u8be2\u6570\u636e",
   invalidSymbol: "\u8bf7\u8f93\u5165 6 \u4f4d\u80a1\u7968\u4ee3\u7801",
   requestFailed: "\u63a5\u53e3\u8bf7\u6c42\u5931\u8d25",
-  emptyMarkReason: "\u8bf7\u8f93\u5165\u6807\u8bb0\u539f\u56e0",
-  markSuccess: "\u6807\u8bb0\u6210\u529f",
+  markSuccess: "备注已保存",
 };
 
 const stockNameElement = document.getElementById("stock-name");
@@ -33,24 +32,26 @@ const stockForm = document.getElementById("stock-form");
 const symbolInput = document.getElementById("stock-symbol");
 const reloadButton = document.getElementById("reload-btn");
 const markButton = document.getElementById("mark-btn");
-const markReasonInput = document.getElementById("stock-mark-reason");
+const stockNoteEditor = StockNotes.mount(document.getElementById("stock-note-editor"), { id: "stock-mark-reason" });
+const markReasonInput = stockNoteEditor.input;
 const markFeedbackElement = document.getElementById("mark-feedback");
 
 let currentValuationPayload = null;
 let currentPerformancePayload = null;
 let currentNamePayload = null;
+let activeRequestId = 0;
 
 const chartMap = {
-  pe: echarts.init(document.getElementById("pe-chart")),
-  pb: echarts.init(document.getElementById("pb-chart")),
-  ps: echarts.init(document.getElementById("ps-chart")),
-  marketPerformance: echarts.init(document.getElementById("market-performance-chart")),
+  pe: echarts.init(document.getElementById("pe-chart"), "paper-notebook"),
+  pb: echarts.init(document.getElementById("pb-chart"), "paper-notebook"),
+  ps: echarts.init(document.getElementById("ps-chart"), "paper-notebook"),
+  marketPerformance: echarts.init(document.getElementById("market-performance-chart"), "paper-notebook"),
 };
 
 const metricMeta = {
-  pe: { label: "PE(TTM)", color: "#34d399" },
-  pb: { label: uiText.pb, color: "#60a5fa" },
-  ps: { label: uiText.ps, color: "#f59e0b" },
+  pe: { label: "PE(TTM)", color: "#4e6750" },
+  pb: { label: uiText.pb, color: "#677c91" },
+  ps: { label: uiText.ps, color: "#af8b4e" },
 };
 
 const LAST_SYMBOL_STORAGE_KEY = "invest:last-symbol";
@@ -75,7 +76,11 @@ function formatValue(value) {
 }
 
 function formatYiValue(value) {
-  return `${Number(value).toFixed(2)} ${uiText.yi}`;
+  return value == null || !Number.isFinite(Number(value)) ? "暂无数据" : `${Number(value).toFixed(2)} ${uiText.yi}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
 
 function buildStockLabel(symbol, namePayload) {
@@ -91,33 +96,37 @@ function renderMetricChart(metricKey, metricPayload, stockLabel) {
   const dates = metricPayload.series.map((item) => item.date);
   const values = metricPayload.series.map((item) => item.value);
   const { mean, std, upper, lower } = metricPayload.stats;
+  const compact = chart.getWidth() < 720;
 
   chart.setOption({
     backgroundColor: "transparent",
     title: {
-      text: `${stockLabel} ${meta.label} ${uiText.latestRangeTrend}`,
+      text: compact ? `${stockLabel}\n${meta.label} · ${uiText.latestRangeTrend}` : `${stockLabel} ${meta.label} ${uiText.latestRangeTrend}`,
       left: 12,
       top: 12,
       textStyle: {
-        color: "#f8fafc",
-        fontSize: 18,
-        fontWeight: 600,
+        color: "#343b35",
+        fontSize: compact ? 13 : 16,
+        lineHeight: 20,
+        fontWeight: 500,
       },
     },
     tooltip: {
       trigger: "axis",
     },
     legend: {
-      top: 10,
+      selected: chart.getOption()?.legend?.[0]?.selected || {},
+      top: compact ? 58 : 10,
+      left: compact ? 12 : undefined,
       right: 12,
       textStyle: {
-        color: "#dbe4ff",
+        color: "#4d574b",
       },
     },
     grid: {
       left: 56,
       right: 32,
-      top: 72,
+      top: compact ? 110 : 72,
       bottom: 48,
     },
     xAxis: {
@@ -125,11 +134,11 @@ function renderMetricChart(metricKey, metricPayload, stockLabel) {
       data: dates,
       boundaryGap: false,
       axisLabel: {
-        color: "#9fb0d6",
+        color: "#6f7769",
       },
       axisLine: {
         lineStyle: {
-          color: "rgba(159, 176, 214, 0.35)",
+          color: "rgba(111, 119, 105, 0.35)",
         },
       },
     },
@@ -137,11 +146,11 @@ function renderMetricChart(metricKey, metricPayload, stockLabel) {
       type: "value",
       name: meta.label,
       axisLabel: {
-        color: "#9fb0d6",
+        color: "#6f7769",
       },
       splitLine: {
         lineStyle: {
-          color: "rgba(159, 176, 214, 0.12)",
+          color: "rgba(111, 119, 105, 0.15)",
         },
       },
     },
@@ -150,7 +159,7 @@ function renderMetricChart(metricKey, metricPayload, stockLabel) {
         name: meta.label,
         type: "line",
         smooth: true,
-        showSymbol: false,
+        showSymbol: values.length === 1,
         data: values,
         lineStyle: {
           width: 2,
@@ -168,7 +177,7 @@ function renderMetricChart(metricKey, metricPayload, stockLabel) {
         lineStyle: {
           width: 2,
           type: "dashed",
-          color: "#e879f9",
+          color: "#8b897f",
         },
       },
       {
@@ -179,7 +188,7 @@ function renderMetricChart(metricKey, metricPayload, stockLabel) {
         lineStyle: {
           width: 2,
           type: "dashed",
-          color: "#f97316",
+          color: "#b57a5d",
         },
       },
       {
@@ -190,11 +199,11 @@ function renderMetricChart(metricKey, metricPayload, stockLabel) {
         lineStyle: {
           width: 2,
           type: "dashed",
-          color: "#22c55e",
+          color: "#79916c",
         },
       },
     ],
-  });
+  }, true);
 
   const summaryText = `${uiText.latest} ${meta.label}: ${formatValue(metricPayload.latest.value)} | ${uiText.mean}: ${formatValue(mean)} | ${uiText.std}: ${formatValue(std)}`;
   if (metricKey === "pe") peSummaryElement.textContent = summaryText;
@@ -204,13 +213,14 @@ function renderMetricChart(metricKey, metricPayload, stockLabel) {
 
 function renderMarketPerformanceChart(payload, stockLabel, latestAvailableDate) {
   const chart = chartMap.marketPerformance;
+  const compact = chart.getWidth() < 720;
   const dates = payload.series.map((item) => item.date);
   const marketCap = payload.series.map((item) => item.market_cap);
   const revenue = payload.series.map((item) => ({
     value: item.revenue,
     auditOpinion: item.audit_opinion || null,
     itemStyle: {
-      color: item.highlight_revenue ? "rgba(239, 68, 68, 0.82)" : "rgba(52, 211, 153, 0.72)",
+      color: item.highlight_revenue ? "rgba(164, 87, 77, 0.85)" : "rgba(78, 103, 80, 0.72)",
       borderRadius: [6, 6, 0, 0],
     },
   }));
@@ -219,54 +229,62 @@ function renderMarketPerformanceChart(payload, stockLabel, latestAvailableDate) 
   chart.setOption({
     backgroundColor: "transparent",
     title: {
-      text: `${stockLabel} ${payload.label}`,
+      text: compact ? `${stockLabel}\n${payload.label}` : `${stockLabel} ${payload.label}`,
       left: 12,
       top: 12,
       textStyle: {
-        color: "#f8fafc",
-        fontSize: 18,
-        fontWeight: 600,
+        color: "#343b35",
+        fontSize: compact ? 13 : 16,
+        lineHeight: 20,
+        fontWeight: 500,
       },
     },
     tooltip: {
       trigger: "axis",
+      // Follow the cursor directly: ECharts' default glide and band slide trail it and read as dropped frames.
+      transitionDuration: 0,
       axisPointer: {
         type: "shadow",
+        animation: false,
       },
       formatter(params) {
-        const lines = [params[0]?.axisValue || ""];
+        const point = payload.series[params[0]?.dataIndex];
+        const lines = [escapeHtml(point?.report_date || params[0]?.axisValue || "")];
+        if (point?.market_cap_date) lines.push(`市值交易日: ${escapeHtml(point.market_cap_date)}`);
         params.forEach((item) => {
           const rawValue = typeof item.data === "object" && item.data !== null ? item.data.value : item.data;
-          lines.push(`${item.marker}${item.seriesName}: ${formatYiValue(Number(rawValue || 0))}`);
+          lines.push(`${item.marker}${escapeHtml(item.seriesName)}: ${formatYiValue(rawValue)}`);
           if (item.seriesName === uiText.revenue && item.data?.auditOpinion) {
-            lines.push(`\u5ba1\u8ba1\u610f\u89c1: ${item.data.auditOpinion}`);
+            lines.push(`\u5ba1\u8ba1\u610f\u89c1: ${escapeHtml(item.data.auditOpinion)}`);
           }
         });
         return lines.join("<br/>");
       },
     },
     legend: {
-      top: 10,
+      selected: chart.getOption()?.legend?.[0]?.selected || {},
+      top: compact ? 58 : 10,
+      left: compact ? 12 : undefined,
       right: 12,
       textStyle: {
-        color: "#dbe4ff",
+        color: "#4d574b",
       },
     },
     grid: {
       left: 56,
       right: 56,
-      top: 72,
+      top: compact ? 125 : 72,
       bottom: 48,
     },
     xAxis: {
       type: "category",
       data: dates,
       axisLabel: {
-        color: "#9fb0d6",
+        color: "#6f7769",
       },
       axisLine: {
         lineStyle: {
-          color: "rgba(159, 176, 214, 0.35)",
+          color: "rgba(111, 119, 105, 0.35)",
         },
       },
     },
@@ -275,11 +293,11 @@ function renderMarketPerformanceChart(payload, stockLabel, latestAvailableDate) 
         type: "value",
         name: `${uiText.marketCap}(${uiText.yi})`,
         axisLabel: {
-          color: "#9fb0d6",
+          color: "#6f7769",
         },
         splitLine: {
           lineStyle: {
-            color: "rgba(159, 176, 214, 0.12)",
+            color: "rgba(111, 119, 105, 0.15)",
           },
         },
       },
@@ -287,7 +305,7 @@ function renderMarketPerformanceChart(payload, stockLabel, latestAvailableDate) 
         type: "value",
         name: `${uiText.revenue}/${uiText.netProfit}(${uiText.yi})`,
         axisLabel: {
-          color: "#9fb0d6",
+          color: "#6f7769",
         },
         splitLine: {
           show: false,
@@ -298,13 +316,13 @@ function renderMarketPerformanceChart(payload, stockLabel, latestAvailableDate) 
       {
         name: uiText.marketCap,
         type: "line",
-        smooth: true,
-        showSymbol: false,
+        smooth: false,
+        showSymbol: marketCap.length === 1,
         data: marketCap,
         yAxisIndex: 0,
         lineStyle: {
           width: 2,
-          color: "#7dd3fc",
+          color: "#677c91",
         },
       },
       {
@@ -319,39 +337,49 @@ function renderMarketPerformanceChart(payload, stockLabel, latestAvailableDate) 
         data: netProfit,
         yAxisIndex: 1,
         itemStyle: {
-          color: "rgba(249, 115, 22, 0.72)",
+          color: "rgba(181, 122, 93, 0.8)",
           borderRadius: [6, 6, 0, 0],
         },
       },
     ],
-  });
+  }, true);
 
-  marketPerformanceSummaryElement.textContent = `${uiText.latest} ${uiText.marketCap}: ${formatYiValue(payload.latest.market_cap)} | ${uiText.latest} ${uiText.revenue}: ${formatYiValue(payload.latest.revenue)} | ${uiText.latest} ${uiText.netProfit}: ${formatYiValue(payload.latest.net_profit)}`;
-  marketPerformanceLatestDateElement.textContent = latestAvailableDate || "-";
+  const latestMarket = payload.latest_market_cap;
+  marketPerformanceSummaryElement.textContent = `最新市值: ${formatYiValue(latestMarket?.value)}（${latestMarket?.date || "-"}） | 财报 ${payload.latest.report_date || payload.latest.date}：营收(TTM) ${formatYiValue(payload.latest.revenue)} / 净利润(TTM) ${formatYiValue(payload.latest.net_profit)}`;
+  marketPerformanceLatestDateElement.textContent = latestMarket?.date || latestAvailableDate || "-";
 }
 
 function renderCharts(valuationPayload, performancePayload, namePayload) {
-  const stockLabel = buildStockLabel(valuationPayload.symbol, namePayload);
+  const stockLabel = buildStockLabel((valuationPayload || performancePayload).symbol, namePayload);
   stockNameElement.textContent = stockLabel;
-  latestPeElement.textContent = formatValue(valuationPayload.metrics.pe.latest.value);
-  latestPbElement.textContent = formatValue(valuationPayload.metrics.pb.latest.value);
-  latestPsElement.textContent = formatValue(valuationPayload.metrics.ps.latest.value);
+  if (valuationPayload) {
+    latestPeElement.textContent = formatValue(valuationPayload.metrics.pe.latest.value);
+    latestPbElement.textContent = formatValue(valuationPayload.metrics.pb.latest.value);
+    latestPsElement.textContent = formatValue(valuationPayload.metrics.ps.latest.value);
 
-  const valuationDates = Object.values(valuationPayload.metrics)
+    renderMetricChart("pe", valuationPayload.metrics.pe, stockLabel);
+    renderMetricChart("pb", valuationPayload.metrics.pb, stockLabel);
+    renderMetricChart("ps", valuationPayload.metrics.ps, stockLabel);
+  }
+  const valuationDates = Object.values(valuationPayload?.metrics || {})
     .flatMap((metric) => metric.series)
     .map((item) => item.date);
-  const performanceDates = performancePayload.market_performance.series.map((item) => item.date);
+  const performanceDates = (performancePayload?.market_performance.series || []).map((item) => item.report_date).filter(Boolean);
   const ranges = [...valuationDates, ...performanceDates].sort();
-  dateRangeElement.textContent = `${ranges[0]} ~ ${ranges[ranges.length - 1]}`;
+  dateRangeElement.textContent = ranges.length ? `${ranges[0]} ~ ${ranges[ranges.length - 1]}` : "-";
 
-  renderMetricChart("pe", valuationPayload.metrics.pe, stockLabel);
-  renderMetricChart("pb", valuationPayload.metrics.pb, stockLabel);
-  renderMetricChart("ps", valuationPayload.metrics.ps, stockLabel);
-  renderMarketPerformanceChart(
-    performancePayload.market_performance,
-    stockLabel,
-    performancePayload.provider_summary?.latest_available_date,
-  );
+  if (performancePayload) {
+    renderMarketPerformanceChart(
+      performancePayload.market_performance,
+      stockLabel,
+      performancePayload.provider_summary?.latest_available_date,
+    );
+  }
+}
+
+function renderChartError(chart, message) {
+  chart.clear();
+  chart.setOption({ title: { text: message, left: "center", top: "middle", textStyle: { color: "#a4574d", fontSize: 16 } } }, true);
 }
 
 function clearCharts(message) {
@@ -367,18 +395,7 @@ function clearCharts(message) {
   marketPerformanceLatestDateElement.textContent = "-";
 
   Object.values(chartMap).forEach((chart) => {
-    chart.clear();
-    chart.setOption({
-      title: {
-        text: message,
-        left: "center",
-        top: "middle",
-        textStyle: {
-          color: "#fca5a5",
-          fontSize: 16,
-        },
-      },
-    });
+    renderChartError(chart, message);
   });
 }
 
@@ -394,19 +411,22 @@ function setLoadingState(loading) {
 
 function setMarkingState(loading) {
   markButton.disabled = loading;
-  markButton.textContent = loading ? uiText.loading : "\u6807\u8bb0\u80a1\u7968";
+  markButton.textContent = loading ? uiText.loading : "保存备注";
 }
 
 async function markCurrentStock() {
   const normalizedSymbol = sanitizeSymbolInput(symbolInput.value);
-  const markReason = String(markReasonInput.value || "").trim();
+  const markReason = markReasonInput.value;
 
   if (normalizedSymbol.length !== 6) {
     setFeedback(uiText.invalidSymbol, "error");
     return;
   }
-  if (!markReason) {
-    setFeedback(uiText.emptyMarkReason, "error");
+  const noteError = StockNotes.validate(markReason);
+  if (noteError) {
+    setFeedback(noteError, "error");
+    document.querySelector(".home-note-disclosure").open = true;
+    stockNoteEditor.showEdit();
     return;
   }
 
@@ -415,7 +435,6 @@ async function markCurrentStock() {
     const payload = {
       symbol: normalizedSymbol,
       mark_reason: markReason,
-      name: currentNamePayload?.name || undefined,
     };
     const response = await fetch("/api/stocks/marked/", {
       method: "POST",
@@ -428,9 +447,12 @@ async function markCurrentStock() {
     if (!response.ok) {
       throw new Error(result.detail || `${uiText.requestFailed}: ${response.status}`);
     }
-    if (!currentNamePayload && result.name) {
+    if (!currentNamePayload && result.name && (currentValuationPayload || currentPerformancePayload)?.symbol === result.symbol) {
       currentNamePayload = { symbol: result.symbol, name: result.name };
       renderCurrentDashboard();
+    }
+    if (sanitizeSymbolInput(symbolInput.value) === normalizedSymbol && markReasonInput.value === markReason) {
+      stockNoteEditor.showPreview();
     }
     setFeedback(`${result.symbol} ${uiText.markSuccess}`, "success");
   } catch (error) {
@@ -456,14 +478,19 @@ function fetchStockName(symbol, timeoutMs = 2500) {
 }
 
 function renderCurrentDashboard() {
-  if (currentValuationPayload && currentPerformancePayload) {
+  if (currentValuationPayload || currentPerformancePayload) {
     renderCharts(currentValuationPayload, currentPerformancePayload, currentNamePayload);
   }
 }
 
 async function loadData(symbol) {
+  const requestId = ++activeRequestId;
   const normalizedSymbol = sanitizeSymbolInput(symbol);
   if (normalizedSymbol.length !== 6) {
+    currentValuationPayload = null;
+    currentPerformancePayload = null;
+    currentNamePayload = null;
+    setLoadingState(false);
     clearCharts(uiText.invalidSymbol);
     return;
   }
@@ -471,6 +498,7 @@ async function loadData(symbol) {
   symbolInput.value = normalizedSymbol;
   setFeedback("", "info");
   setLoadingState(true);
+  clearCharts(uiText.loading);
 
   try {
     currentValuationPayload = null;
@@ -478,35 +506,39 @@ async function loadData(symbol) {
     currentNamePayload = null;
 
     const namePromise = fetchStockName(normalizedSymbol);
-    const [valuationResponse, performanceResponse] = await Promise.all([
-      fetch(`/api/stocks/valuation-metrics?symbol=${normalizedSymbol}&years=10`),
-      fetch(`/api/stocks/market-performance?symbol=${normalizedSymbol}&years=10`),
+    const [valuationResult, performanceResult] = await Promise.allSettled([
+      fetchStockData(`/api/stocks/valuation-metrics?symbol=${normalizedSymbol}&years=10`),
+      fetchStockData(`/api/stocks/market-performance?symbol=${normalizedSymbol}&years=10`),
     ]);
-
-    const valuationPayload = await valuationResponse.json();
-    const performancePayload = await performanceResponse.json();
-
-    if (!valuationResponse.ok) {
-      throw new Error(valuationPayload.detail || `${uiText.requestFailed}: ${valuationResponse.status}`);
+    if (requestId !== activeRequestId) return;
+    currentValuationPayload = valuationResult.status === "fulfilled" ? valuationResult.value : null;
+    currentPerformancePayload = performanceResult.status === "fulfilled" ? performanceResult.value : null;
+    if (!currentValuationPayload) {
+      ["pe", "pb", "ps"].forEach((key) => renderChartError(chartMap[key], valuationResult.reason.message));
     }
-    if (!performanceResponse.ok) {
-      throw new Error(performancePayload.detail || `${uiText.requestFailed}: ${performanceResponse.status}`);
-    }
-
-    currentValuationPayload = valuationPayload;
-    currentPerformancePayload = performancePayload;
+    if (!currentPerformancePayload) renderChartError(chartMap.marketPerformance, performanceResult.reason.message);
+    if (!currentValuationPayload && !currentPerformancePayload) stockNameElement.textContent = normalizedSymbol;
     persistLastSymbol(normalizedSymbol);
     renderCurrentDashboard();
     setLoadingState(false);
 
     namePromise.then((namePayload) => {
+      if (requestId !== activeRequestId) return;
       currentNamePayload = namePayload;
       renderCurrentDashboard();
     });
   } catch (error) {
+    if (requestId !== activeRequestId) return;
     clearCharts(error.message);
     setLoadingState(false);
   }
+}
+
+async function fetchStockData(url) {
+  const response = await fetch(url);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.detail || `${uiText.requestFailed}: ${response.status}`);
+  return payload;
 }
 
 symbolInput.addEventListener("input", (event) => {
@@ -525,7 +557,10 @@ markButton.addEventListener("click", () => {
 });
 
 window.addEventListener("resize", () => {
+  const wasCompact = chartMap.pe.getWidth() < 720;
   Object.values(chartMap).forEach((chart) => chart.resize());
+  // Only rebuild layout at a breakpoint, not on small viewport-size changes.
+  if (wasCompact !== (chartMap.pe.getWidth() < 720)) renderCurrentDashboard();
 });
 
-loadData(readLastSymbol() || symbolInput.value);
+loadData(new URLSearchParams(window.location.search).get("symbol") || readLastSymbol() || symbolInput.value);

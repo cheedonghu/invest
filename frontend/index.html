@@ -1,76 +1,96 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>&#20272;&#20540;&#20998;&#26512;</title>
+    <title>估值分析</title>
     <link rel="stylesheet" href="/assets/style.css" />
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   </head>
   <body>
     <main class="page-shell">
-      <nav class="top-nav">
-        <a class="nav-link active" href="/">&#20272;&#20540;&#20998;&#26512;</a>
-        <a class="nav-link" href="/balance-sheet">&#36164;&#20135;&#36127;&#20538;&#34920;</a>
-        <a class="nav-link" href="/valuation">&#36164;&#20135;&#20272;&#20540;</a>
-        <a class="nav-link" href="/marked-stocks">&#24050;&#26631;&#35760;&#32929;&#31080;</a>
-      </nav>
+      <header class="site-header">
+        <a class="site-brand" href="/"
+          >投资研究手记<span>INVESTMENT NOTES</span></a
+        >
+        <nav class="top-nav" aria-label="主导航">
+          <a class="nav-link active" href="/" aria-current="page">估值分析</a>
+          <a class="nav-link" href="/balance-sheet">资产负债表</a>
+          <a class="nav-link" href="/valuation">资产估值</a>
+          <a class="nav-link" href="/marked-stocks">股票标记</a>
+        </nav>
+      </header>
 
       <section class="hero-card hero-card--overview">
         <div>
-          <p class="eyebrow">AKShare + Python + ECharts</p>
-          <h1>&#20272;&#20540;&#20998;&#26512;</h1>
+          <p class="eyebrow">公司研究 / 历史估值</p>
+          <h1>估值分析</h1>
           <p class="hero-copy">
-            &#36755;&#20837;&#20219;&#24847; 6 &#20301; A &#32929;&#20195;&#30721;&#65292;&#25509;&#21475;&#25389;&#21462;&#36817; 10 &#24180;&#20272;&#20540;&#25351;&#26631;&#65292;&#20998;&#21035;&#23637;&#31034; PE(TTM)&#12289;&#24066;&#20928;&#29575;&#21644;&#24066;&#38144;&#29575;&#30340;&#36208;&#21183;&#65292;
-            &#24182;&#22312;&#22270;&#19978;&#21472;&#21152;&#22343;&#20540;&#21450;&#21152;&#20943; 1 &#20010;&#26631;&#20934;&#24046;&#36741;&#21161;&#32447;&#12290;
+            输入任意 6 位 A 股代码，接口挭取近 10 年估值指标，分别展示
+            PE(TTM)、市净率和市销率的走势， 并在图上叠加均值及加减 1
+            个标准差辅助线。
           </p>
         </div>
         <div class="stat-grid overview-grid">
           <article class="stat-card overview-card overview-card--wide">
-            <span>&#24403;&#21069;&#32929;&#31080;</span>
+            <span>当前股票</span>
             <strong id="stock-name">-</strong>
           </article>
           <article class="stat-card overview-card overview-card--wide">
-            <span>&#26679;&#26412;&#21306;&#38388;</span>
+            <span>样本区间</span>
             <strong id="date-range">-</strong>
           </article>
           <article class="stat-card overview-card">
-            <span>&#26368;&#26032; PE</span>
+            <span>最新 PE</span>
             <strong id="latest-pe">-</strong>
           </article>
           <article class="stat-card overview-card">
-            <span>&#26368;&#26032; PB</span>
+            <span>最新 PB</span>
             <strong id="latest-pb">-</strong>
           </article>
           <article class="stat-card overview-card">
-            <span>&#26368;&#26032;&#24066;&#38144;&#29575;</span>
+            <span>最新市销率</span>
             <strong id="latest-ps">-</strong>
           </article>
           <article class="stat-card overview-card">
-            <span>&#24066;&#20540;&#25968;&#25454;&#25130;&#33267;</span>
+            <span>市值数据截至</span>
             <strong id="market-performance-latest-date">-</strong>
           </article>
         </div>
       </section>
 
       <section class="panel-card">
-        <div class="panel-header panel-controls">
+        <div class="panel-header panel-controls note-controls">
           <div>
-            <h2>&#20272;&#20540;&#25351;&#26631;&#36208;&#21183;</h2>
-            <p>&#25351;&#26631;&#40664;&#35748;&#21462;&#36817; 10 &#24180;&#65292;&#33509;&#19978;&#24066;&#26102;&#38388;&#19981;&#36275; 10 &#24180;&#21017;&#20840;&#37096;&#23637;&#31034;&#12290;</p>
+            <h2>估值指标走势</h2>
+            <p>指标默认取近 10 年，若上市时间不足 10 年则全部展示。</p>
           </div>
           <form id="stock-form" class="stock-form">
             <label class="stock-input-group" for="stock-symbol">
-              <span>&#32929;&#31080;&#20195;&#30721;</span>
-              <input id="stock-symbol" name="symbol" type="text" inputmode="numeric" maxlength="6" placeholder="&#20363;&#22914; 600036" value="600036" />
+              <span>股票代码</span>
+              <input
+                id="stock-symbol"
+                name="symbol"
+                type="text"
+                inputmode="numeric"
+                maxlength="6"
+                placeholder="例如 600036"
+                value="600036"
+              />
             </label>
-            <label class="stock-input-group stock-reason-group" for="stock-mark-reason">
-              <span>&#26631;&#35760;&#21407;&#22240;</span>
-              <input id="stock-mark-reason" name="mark-reason" type="text" maxlength="120" placeholder="&#20363;&#22914; &#20272;&#20540;&#20302;&#20301;&#65292;&#25345;&#32493;&#36319;&#36394;" />
-            </label>
+            <details class="home-note-disclosure">
+              <summary>为这家公司写备注</summary>
+              <div class="stock-input-group stock-reason-group">
+                <label for="stock-mark-reason">备注</label>
+                <div id="stock-note-editor"></div>
+              </div>
+            </details>
             <div class="stock-action-group">
-              <button id="reload-btn" type="submit">&#26597;&#35810;&#25968;&#25454;</button>
-              <button id="mark-btn" type="button" class="secondary-btn">&#26631;&#35760;&#32929;&#31080;</button>
+              <button id="reload-btn" type="submit">查询数据</button>
+              <button id="mark-btn" type="button" class="secondary-btn">
+                保存备注
+              </button>
             </div>
           </form>
           <p id="mark-feedback" class="form-feedback" aria-live="polite"></p>
@@ -80,8 +100,12 @@
       <section class="panel-card metric-panel">
         <div class="metric-panel-head">
           <div>
-            <h2>&#24066;&#20540;&#19982;&#19994;&#32489;&#36208;&#21183;</h2>
+            <h2>市值与业绩走势</h2>
             <p id="market-performance-summary" class="metric-summary">-</p>
+            <p class="chart-note">
+              各季度按报告期末匹配此前最近交易日的市值；营收与合并净利润采用 TTM
+              口径。财报期末早于披露日，本图用于历史对比。左右轴刻度不同，曲线与柱高不直接表示比例。
+            </p>
           </div>
         </div>
         <div id="market-performance-chart" class="chart metric-chart"></div>
@@ -100,7 +124,7 @@
       <section class="panel-card metric-panel">
         <div class="metric-panel-head">
           <div>
-            <h2>&#24066;&#20928;&#29575;</h2>
+            <h2>市净率</h2>
             <p id="pb-summary" class="metric-summary">-</p>
           </div>
         </div>
@@ -110,15 +134,18 @@
       <section class="panel-card metric-panel">
         <div class="metric-panel-head">
           <div>
-            <h2>&#24066;&#38144;&#29575;</h2>
+            <h2>市销率</h2>
             <p id="ps-summary" class="metric-summary">-</p>
           </div>
         </div>
         <div id="ps-chart" class="chart metric-chart"></div>
       </section>
-
     </main>
 
-    <script src="/assets/app.js"></script>
+    <script src="/assets/vendor/marked-18.1.1.umd.js"></script>
+    <script src="/assets/vendor/purify-3.4.17.min.js"></script>
+    <script src="/assets/stock-notes.js"></script>
+    <script src="/assets/paper-theme.js?v=native-hover-3"></script>
+    <script src="/assets/app.js?v=instant-hover-1"></script>
   </body>
 </html>

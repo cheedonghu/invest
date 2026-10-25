@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from math import isfinite
 from typing import Any
 
 import pandas as pd
@@ -235,11 +236,15 @@ class StockService:
         market_cap_col = self._find_column(valuation_df, ["\u603b\u5e02\u503c", "TOTAL_MARKET_CAP", "market_cap", "total_market_value"])
         valuation_cleaned = self._normalize_series_frame(valuation_df, valuation_date_col, market_cap_col)
         valuation_cleaned.rename(columns={"value": "market_cap"}, inplace=True)
+        valuation_cleaned = valuation_cleaned.loc[valuation_cleaned["market_cap"] > 0].copy()
+        if valuation_cleaned.empty:
+            raise HTTPException(status_code=404, detail=f"market cap data is empty for symbol {symbol}")
         valuation_cleaned["market_cap"] = valuation_cleaned["market_cap"] / 1e8
 
         performance_date_col = self._find_column(performance_df, ["REPORT_DATE", "\u62a5\u544a\u65e5", "\u6570\u636e\u65e5\u671f"])
         revenue_col = self._find_column(performance_df, ["\u8425\u4e1a\u603b\u6536\u5165", "\u8425\u4e1a\u6536\u5165", "TOTAL_OPERATE_INCOME", "OPERATE_INCOME"])
-        profit_col = self._find_column(performance_df, ["\u5f52\u6bcd\u51c0\u5229\u6da6", "\u51c0\u5229\u6da6", "\u5f52\u5c5e\u4e8e\u6bcd\u516c\u53f8\u80a1\u4e1c\u7684\u51c0\u5229\u6da6", "PARENT_NETPROFIT", "NETPROFIT"])
+        # The cache stores NETPROFIT (consolidated), so keep the same basis on live feeds.
+        profit_col = self._find_column(performance_df, ["NETPROFIT", "\u51c0\u5229\u6da6"])
         opinion_col = self._find_optional_column(performance_df, ["OPINION_TYPE", "opinion_type", "\u5ba1\u8ba1\u610f\u89c1\u7c7b\u578b", "\u5ba1\u8ba1\u610f\u89c1"])
 
         selected_columns = [performance_date_col, revenue_col, profit_col]
@@ -261,11 +266,21 @@ class StockService:
                 revenue=lambda df: pd.to_numeric(df["revenue"], errors="coerce") / 1e8,
                 net_profit=lambda df: pd.to_numeric(df["net_profit"], errors="coerce") / 1e8,
             )
-            .dropna(subset=["date", "revenue", "net_profit"])
+            .dropna(subset=["date"])
+            .loc[lambda df: df["date"].dt.is_quarter_end]
             .sort_values("date")
             .drop_duplicates(subset=["date"], keep="last")
             .reset_index(drop=True)
         )
+        fallback_revenue_col = self._find_optional_column(performance_df, ["OPERATE_INCOME", "营业收入", "OPERATE_INCOME_BALANCE"])
+        if fallback_revenue_col is not None and fallback_revenue_col != revenue_col:
+            fallback = performance_df[[performance_date_col, fallback_revenue_col]].copy()
+            fallback["date"] = self._normalize_datetime_key(fallback[performance_date_col])
+            fallback["fallback_revenue"] = pd.to_numeric(fallback[fallback_revenue_col], errors="coerce") / 1e8
+            fallback = fallback.dropna(subset=["date"]).drop_duplicates("date", keep="last")
+            performance_cleaned = performance_cleaned.merge(fallback[["date", "fallback_revenue"]], on="date", how="left")
+            missing = performance_cleaned["revenue"].isna() | performance_cleaned["revenue"].eq(0)
+            performance_cleaned.loc[missing, "revenue"] = performance_cleaned.loc[missing, "fallback_revenue"]
         if "audit_opinion" not in performance_cleaned.columns:
             performance_cleaned["audit_opinion"] = None
         else:
@@ -296,8 +311,9 @@ class StockService:
 
         merged = pd.merge_asof(
             performance_cleaned.sort_values("date"),
-            valuation_cleaned.sort_values("date"),
-            on="date",
+            valuation_cleaned.rename(columns={"date": "market_cap_date"}).sort_values("market_cap_date"),
+            left_on="date",
+            right_on="market_cap_date",
             direction="backward",
         )
         merged = merged.dropna(subset=["market_cap"]).reset_index(drop=True)
@@ -307,6 +323,8 @@ class StockService:
         series = [
             {
                 "date": self._format_quarter_label(row.date),
+                "report_date": row.date.strftime("%Y-%m-%d"),
+                "market_cap_date": row.market_cap_date.strftime("%Y-%m-%d"),
                 "market_cap": round(float(row.market_cap), 2),
                 "revenue": round(float(row.revenue), 2),
                 "net_profit": round(float(row.net_profit), 2),
@@ -316,7 +334,13 @@ class StockService:
             for row in merged.itertuples(index=False)
         ]
 
-        return {"label": "\u5e02\u503c\u4e0e\u4e1a\u7ee9\u5b63\u5ea6\u8d8b\u52bf", "latest": series[-1], "series": series}
+        latest_market = valuation_cleaned.iloc[-1]
+        return {
+            "label": "市值与业绩季度趋势",
+            "latest": series[-1],
+            "latest_market_cap": {"date": latest_market["date"].strftime("%Y-%m-%d"), "value": round(float(latest_market["market_cap"]), 2)},
+            "series": series,
+        }
 
     def _extract_latest_available_date(self, raw_df: pd.DataFrame) -> str | None:
         date_col = self._find_column(raw_df, ["\u6570\u636e\u65e5\u671f", "date", "trade_date"])
@@ -349,17 +373,20 @@ class StockService:
                 value=lambda df: pd.to_numeric(df["value"], errors="coerce"),
             )
             .dropna(subset=["date", "value"])
+            .loc[lambda df: df["value"].map(isfinite)]
             .sort_values("date")
+            .drop_duplicates(subset=["date"], keep="last")
             .reset_index(drop=True)
         )
 
     @staticmethod
     def _normalize_datetime_key(values: pd.Series) -> pd.Series:
-        return pd.to_datetime(values, errors="coerce").astype("datetime64[ns]")
+        return pd.to_datetime(values.astype(str), errors="coerce", format="mixed").astype("datetime64[ns]")
 
     @staticmethod
     def _calculate_ttm_from_cumulative(dates: pd.Series, values: pd.Series) -> pd.Series:
         frame = pd.DataFrame({"date": pd.to_datetime(dates), "value": pd.to_numeric(values, errors="coerce")}).dropna()
+        frame = frame.loc[frame["value"].map(isfinite)]
         if frame.empty:
             return pd.Series(index=dates.index, dtype="float64")
 

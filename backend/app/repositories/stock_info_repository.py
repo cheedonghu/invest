@@ -85,3 +85,12 @@ class StockInfoRepository:
             }))
             connection.commit()
         return affected
+
+    def clear_mark_reason(self, security_code: str) -> int:
+        """移除股票标记，保留股票名称及关联的行情、财报数据。"""
+        query = f"UPDATE {self.table_name} SET mark_reason = NULL WHERE security_code = %s"
+        with self.connect() as connection:
+            cursor = connection.cursor()
+            affected = int(cursor.execute(query, [security_code]))
+            connection.commit()
+        return affected

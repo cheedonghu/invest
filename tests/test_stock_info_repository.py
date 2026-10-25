@@ -68,6 +68,22 @@ class StockInfoRepositoryTestCase(unittest.TestCase):
         codes = [item["security_code"] for item in self.repository.fetch_marked()]
         self.assertIn(TEST_CODE, codes)
 
+    def test_delete_note_keeps_name_and_supports_readding_long_note(self) -> None:
+        self.repository.upsert_name(TEST_CODE, "测试股票")
+        note = "## 研究笔记\n\n" + "投资判断  \n" * 200
+        self.repository.upsert_mark_reason(TEST_CODE, note)
+        before = self.repository.fetch_by_code(TEST_CODE)
+        self.assertEqual(before["mark_reason"], note)
+        self.repository.clear_mark_reason(TEST_CODE)
+        after = self.repository.fetch_by_code(TEST_CODE)
+        self.assertEqual(after["security_name_abbr"], "测试股票")
+        self.assertEqual(after["created_at"], before["created_at"])
+        self.assertIsNone(after["mark_reason"])
+        self.assertNotIn(TEST_CODE, [row["security_code"] for row in self.repository.fetch_marked()])
+        self.repository.clear_mark_reason(TEST_CODE)
+        self.repository.upsert_mark_reason(TEST_CODE, note)
+        self.assertEqual(self.repository.fetch_by_code(TEST_CODE)["mark_reason"], note)
+
 
 if __name__ == "__main__":
     unittest.main()

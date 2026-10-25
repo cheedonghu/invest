@@ -1,114 +1,172 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>&#36164;&#20135;&#20272;&#20540;</title>
+    <title>资产估值</title>
     <link rel="stylesheet" href="/assets/style.css" />
   </head>
   <body>
     <main class="page-shell">
-      <nav class="top-nav">
-        <a class="nav-link" href="/">&#20272;&#20540;&#20998;&#26512;</a>
-        <a class="nav-link" href="/balance-sheet">&#36164;&#20135;&#36127;&#20538;&#34920;</a>
-        <a class="nav-link active" href="/valuation">&#36164;&#20135;&#20272;&#20540;</a>
-        <a class="nav-link" href="/marked-stocks">&#24050;&#26631;&#35760;&#32929;&#31080;</a>
-      </nav>
+      <header class="site-header">
+        <a class="site-brand" href="/"
+          >投资研究手记<span>INVESTMENT NOTES</span></a
+        >
+        <nav class="top-nav" aria-label="主导航">
+          <a class="nav-link" href="/">估值分析</a>
+          <a class="nav-link" href="/balance-sheet">资产负债表</a>
+          <a class="nav-link active" href="/valuation" aria-current="page"
+            >资产估值</a
+          >
+          <a class="nav-link" href="/marked-stocks">股票标记</a>
+        </nav>
+      </header>
 
       <section class="hero-card valuation-hero">
         <div>
-          <p class="eyebrow">Valuation Workbench</p>
-          <h1>&#32929;&#31080;&#36164;&#20135;&#20272;&#20540;&#24037;&#20855;</h1>
+          <p class="eyebrow">研究工具 / 估值假设</p>
+          <h1>资产估值</h1>
           <p class="hero-copy">
-            &#32477;&#23545;&#20272;&#20540;&#20808;&#25552;&#20379;&#29616;&#37329;&#27969;&#25240;&#29616;&#12289;&#32929;&#21033;&#25240;&#29616;&#27169;&#22411;&#21644;&#20928;&#36164;&#20135;&#20998;&#26512;&#27861;&#19977;&#31181;&#26041;&#24335;&#12290;
-            &#30456;&#23545;&#20272;&#20540;&#26242;&#26102;&#25552;&#20379;&#22806;&#37096;&#24037;&#20855;&#20837;&#21475;&#12290;
+            绝对估值先提供现金流折现、股利折现模型和净资产分析法三种方式。
+            相对估值暂时提供外部工具入口。
           </p>
         </div>
         <div class="valuation-summary-card">
-          <span>&#35828;&#26126;</span>
-          <strong>&#20808;&#20570;&#24555;&#36895;&#20272;&#31639;</strong>
-          <p>&#32477;&#23545;&#20272;&#20540;&#32467;&#26524;&#26356;&#36866;&#21512;&#29992;&#26469;&#20570;&#20551;&#35774;&#27604;&#36739;&#65292;&#19981;&#26159;&#30452;&#25509;&#30340;&#25237;&#36164;&#24314;&#35758;&#12290;</p>
+          <span>说明</span>
+          <strong>先做快速估算</strong>
+          <p>绝对估值结果更适合用来做假设比较，不是直接的投资建议。</p>
         </div>
       </section>
 
       <section class="panel-card">
         <div class="panel-header">
           <div>
-            <h2>&#32477;&#23545;&#20272;&#20540;&#27861;</h2>
-            <p>&#25226;&#20272;&#20540;&#25286;&#25104;&#26410;&#26469;&#29616;&#37329;&#27969;&#12289;&#32929;&#24687;&#25110;&#20928;&#36164;&#20135;&#26469;&#30475;&#12290;</p>
+            <h2>绝对估值法</h2>
+            <p>把估值拆成未来现金流、股息或净资产来看。</p>
           </div>
         </div>
 
         <div class="valuation-grid">
           <article class="valuation-card">
             <div class="valuation-card-head">
-              <h3>&#29616;&#37329;&#27969;&#25240;&#29616;&#27861; (DCF)</h3>
-              <p>&#32473;&#23450;&#26032;&#19968;&#36718;&#30340;&#29616;&#37329;&#27969;&#20551;&#35774;&#65292;&#20272;&#31639;&#26410;&#26469;&#29616;&#20540;&#12290;</p>
+              <h3>现金流折现法 (DCF)</h3>
+              <p>给定新一轮的现金流假设，估算未来现值。</p>
             </div>
             <form id="dcf-form" class="valuation-form">
               <label class="stock-input-group" for="dcf-base-cashflow">
-                <span>&#22522;&#20934;&#33258;&#30001;&#29616;&#37329;&#27969;(&#20159;)</span>
-                <input id="dcf-base-cashflow" type="text" inputmode="decimal" value="120" />
+                <span>基准自由现金流(亿)</span>
+                <input
+                  id="dcf-base-cashflow"
+                  type="text"
+                  inputmode="decimal"
+                  value="120"
+                />
               </label>
               <label class="stock-input-group" for="dcf-years">
-                <span>&#25345;&#32493;&#26102;&#38388;(&#24180;)</span>
-                <input id="dcf-years" type="text" inputmode="numeric" value="5" />
+                <span>持续时间(年)</span>
+                <input
+                  id="dcf-years"
+                  type="text"
+                  inputmode="numeric"
+                  value="5"
+                />
               </label>
               <label class="stock-input-group" for="dcf-growth">
-                <span>&#25104;&#38271;&#24615;(%)</span>
-                <input id="dcf-growth" type="text" inputmode="decimal" value="8" />
+                <span>成长性(%)</span>
+                <input
+                  id="dcf-growth"
+                  type="text"
+                  inputmode="decimal"
+                  value="8"
+                />
               </label>
               <label class="stock-input-group" for="dcf-discount-rate">
-                <span>&#25240;&#29616;&#29575;(%)</span>
-                <input id="dcf-discount-rate" type="text" inputmode="decimal" value="10" />
+                <span>折现率(%)</span>
+                <input
+                  id="dcf-discount-rate"
+                  type="text"
+                  inputmode="decimal"
+                  value="10"
+                />
               </label>
-              <button type="submit">&#35745;&#31639; DCF</button>
+              <button type="submit">计算 DCF</button>
             </form>
             <div id="dcf-result" class="valuation-result"></div>
           </article>
 
           <article class="valuation-card">
             <div class="valuation-card-head">
-              <h3>&#32929;&#21033;&#25240;&#29616;&#27169;&#22411; (DDM)</h3>
-              <p>&#36866;&#21512;&#32929;&#24687;&#21457;&#25918;&#31283;&#23450;&#30340;&#20844;&#21496;&#65292;&#25226;&#26410;&#26469;&#32929;&#24687;&#36824;&#21407;&#21040;&#20170;&#22825;&#12290;</p>
+              <h3>股利折现模型 (DDM)</h3>
+              <p>适合股息发放稳定的公司，把未来股息还原到今天。</p>
             </div>
             <form id="ddm-form" class="valuation-form">
               <label class="stock-input-group" for="ddm-dividend">
-                <span>&#27599;&#32929;&#32929;&#24687;</span>
-                <input id="ddm-dividend" type="text" inputmode="decimal" value="2.5" />
+                <span>每股股息</span>
+                <input
+                  id="ddm-dividend"
+                  type="text"
+                  inputmode="decimal"
+                  value="2.5"
+                />
               </label>
               <label class="stock-input-group" for="ddm-growth">
-                <span>&#38271;&#26399;&#32929;&#24687;&#22686;&#36895;(%)</span>
-                <input id="ddm-growth" type="text" inputmode="decimal" value="4" />
+                <span>长期股息增速(%)</span>
+                <input
+                  id="ddm-growth"
+                  type="text"
+                  inputmode="decimal"
+                  value="4"
+                />
               </label>
               <label class="stock-input-group" for="ddm-required-rate">
-                <span>&#35201;&#27714;&#22238;&#25253;&#29575;(%)</span>
-                <input id="ddm-required-rate" type="text" inputmode="decimal" value="9" />
+                <span>要求回报率(%)</span>
+                <input
+                  id="ddm-required-rate"
+                  type="text"
+                  inputmode="decimal"
+                  value="9"
+                />
               </label>
-              <button type="submit">&#35745;&#31639; DDM</button>
+              <button type="submit">计算 DDM</button>
             </form>
             <div id="ddm-result" class="valuation-result"></div>
           </article>
 
           <article class="valuation-card">
             <div class="valuation-card-head">
-              <h3>&#20928;&#36164;&#20135;&#20998;&#26512;&#27861;</h3>
-              <p>&#29992;&#20928;&#36164;&#20135;&#20316;&#20026;&#38170;&#28857;&#65292;&#32771;&#34385;&#36164;&#20135;&#36136;&#37327;&#21644;&#23433;&#20840;&#36793;&#38469;&#12290;</p>
+              <h3>净资产分析法</h3>
+              <p>用净资产作为锚点，考虑资产质量和安全边际。</p>
             </div>
             <form id="nav-form" class="valuation-form">
               <label class="stock-input-group" for="nav-book-value">
-                <span>&#20928;&#36164;&#20135;(&#20159;)</span>
-                <input id="nav-book-value" type="text" inputmode="decimal" value="980" />
+                <span>净资产(亿)</span>
+                <input
+                  id="nav-book-value"
+                  type="text"
+                  inputmode="decimal"
+                  value="980"
+                />
               </label>
               <label class="stock-input-group" for="nav-quality-factor">
-                <span>&#36164;&#20135;&#36136;&#37327;&#31995;&#25968;</span>
-                <input id="nav-quality-factor" type="text" inputmode="decimal" value="1.05" />
+                <span>资产质量系数</span>
+                <input
+                  id="nav-quality-factor"
+                  type="text"
+                  inputmode="decimal"
+                  value="1.05"
+                />
               </label>
               <label class="stock-input-group" for="nav-safety-margin">
-                <span>&#23433;&#20840;&#36793;&#38469;(%)</span>
-                <input id="nav-safety-margin" type="text" inputmode="decimal" value="20" />
+                <span>安全边际(%)</span>
+                <input
+                  id="nav-safety-margin"
+                  type="text"
+                  inputmode="decimal"
+                  value="20"
+                />
               </label>
-              <button type="submit">&#35745;&#31639;&#20928;&#36164;&#20135;&#20272;&#20540;</button>
+              <button type="submit">计算净资产估值</button>
             </form>
             <div id="nav-result" class="valuation-result"></div>
           </article>
@@ -118,16 +176,22 @@
       <section class="panel-card">
         <div class="panel-header">
           <div>
-            <h2>&#30456;&#23545;&#20272;&#20540;&#27861;</h2>
-            <p>&#31867;&#27604;&#20272;&#20540;&#27861;&#21644;&#22522;&#20110;&#20056;&#25968;&#30340;&#20272;&#20540;&#27861;&#26242;&#26102;&#32479;&#19968;&#36339;&#36716;&#21040;&#22806;&#37096;&#24037;&#20855;&#12290;</p>
+            <h2>相对估值法</h2>
+            <p>类比估值法和基于乘数的估值法暂时统一跳转到外部工具。</p>
           </div>
         </div>
         <div class="external-card">
           <div>
-            <strong>&#25512;&#33616;&#24037;&#20855;: &#29702;&#26447;&#25237;&#36164;</strong>
-            <p>&#21487;&#20197;&#22312;&#37027;&#36793;&#26597;&#30475;&#21516;&#34892;&#27604;&#36739;&#12289;PE/PB/PS &#31561;&#20056;&#25968;&#20272;&#20540;&#21644;&#21382;&#21490;&#20998;&#20301;&#12290;</p>
+            <strong>推荐工具: 理杏投资</strong>
+            <p>可以在那边查看同行比较、PE/PB/PS 等乘数估值和历史分位。</p>
           </div>
-          <a class="external-link" href="https://www.lixinger.com/" target="_blank" rel="noreferrer">&#21069;&#24448; lixinger.com</a>
+          <a
+            class="external-link"
+            href="https://www.lixinger.com/"
+            target="_blank"
+            rel="noreferrer"
+            >前往 lixinger.com</a
+          >
         </div>
       </section>
     </main>

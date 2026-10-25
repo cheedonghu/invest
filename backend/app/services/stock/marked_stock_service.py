@@ -11,6 +11,8 @@ from backend.app.services.stock.stock_sync_coordinator import StockSyncCoordinat
 
 
 class MarkedStockService:
+    MAX_NOTE_LENGTH = 100_000
+
     def __init__(
         self,
         repository: StockInfoRepository | None = None,
@@ -40,6 +42,13 @@ class MarkedStockService:
             raise HTTPException(status_code=500, detail="marked stock was not persisted")
         return self._serialize_row(row)
 
+    def delete_marked_stock(self, symbol: str) -> dict[str, str]:
+        self._ensure_database_available()
+        security_code = self.normalize_symbol(symbol)
+        # 幂等清除备注，不删除共享的 stock_info 记录，也不触发行情同步。
+        self.repository.clear_mark_reason(security_code)
+        return {"symbol": security_code}
+
     def _ensure_database_available(self) -> None:
         if not self.repository.is_available:
             raise HTTPException(status_code=503, detail="database settings are not configured")
@@ -51,12 +60,14 @@ class MarkedStockService:
             raise HTTPException(status_code=400, detail="symbol must be a 6-digit A-share stock code")
         return cleaned
 
-    @staticmethod
-    def normalize_reason(reason: str) -> str:
-        cleaned = (reason or "").strip()
-        if not cleaned:
-            raise HTTPException(status_code=400, detail="mark_reason must not be empty")
-        return cleaned
+    @classmethod
+    def normalize_reason(cls, reason: str) -> str:
+        if not reason or not reason.strip():
+            raise HTTPException(status_code=400, detail="备注不能为空")
+        if len(reason) > cls.MAX_NOTE_LENGTH:
+            raise HTTPException(status_code=400, detail="备注最多支持 100000 个字符")
+        # 缩进代码块和行尾双空格都是 Markdown 语法，保存原文。
+        return reason
 
     @classmethod
     def _serialize_row(cls, row: dict[str, Any]) -> dict[str, Any]:
