@@ -32,6 +32,8 @@ const chart = echarts.init(document.getElementById("balance-chart"));
 let currentPayload = null;
 let currentNamePayload = null;
 let currentIndex = 0;
+let activeRequestId = 0;
+let isLoading = false;
 
 const LAST_SYMBOL_STORAGE_KEY = "invest:last-symbol";
 
@@ -81,14 +83,20 @@ function formatDetails(details = []) {
   return details
     .map((detail) => {
       const suffix = detail.included_in_total ? "" : ` <span style="color:#fbbf24">(${UI_TEXT.displayOnly})</span>`;
-      return `${detail.label}: ${formatYi(detail.value)}${suffix}`;
+      return `${escapeHtml(detail.label)}: ${formatYi(detail.value)}${suffix}`;
     })
     .join("<br/>");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+}
+
 function setLoadingState(loading) {
+  isLoading = loading;
   submitButton.disabled = loading;
   submitButton.textContent = loading ? UI_TEXT.loading : UI_TEXT.query;
+  updateNavigationState();
 }
 
 function fetchStockName(symbol, timeoutMs = 2500) {
@@ -107,13 +115,15 @@ function fetchStockName(symbol, timeoutMs = 2500) {
 }
 
 function updateNavigationState() {
-  const hasPeriods = currentPayload && currentPayload.periods.length > 0;
+  const hasPeriods = !isLoading && currentPayload && currentPayload.periods.length > 0;
   prevButton.disabled = !hasPeriods || currentIndex >= currentPayload.periods.length - 1;
   nextButton.disabled = !hasPeriods || currentIndex <= 0;
   currentButton.disabled = !hasPeriods || currentIndex === 0;
 }
 
 function renderError(message) {
+  currentPayload = null;
+  currentNamePayload = null;
   stockNameElement.textContent = "-";
   reportDateElement.textContent = "-";
   assetsTotalElement.textContent = "-";
@@ -158,8 +168,8 @@ function renderChart(period) {
       details: item.details || [],
     })),
   ];
-  const assetsTotal = period.assets.reduce((sum, item) => sum + item.value, 0);
-  const liabilitiesTotal = period.liabilities.reduce((sum, item) => sum + item.value, 0);
+  const assetsTotal = period.assets_total ?? period.assets.reduce((sum, item) => sum + item.value, 0);
+  const liabilitiesTotal = period.liabilities_total ?? period.liabilities.reduce((sum, item) => sum + item.value, 0);
   const stockDisplay = buildStockLabel(currentPayload.symbol, currentNamePayload);
   const stockTitle = `${stockDisplay} ${UI_TEXT.balanceSheet}`;
 
@@ -198,7 +208,7 @@ function renderChart(period) {
         }
 
         const lines = [
-          `<strong>${activeItem.data.itemLabel || activeItem.axisValue}</strong>`,
+          `<strong>${escapeHtml(activeItem.data.itemLabel || activeItem.axisValue)}</strong>`,
           `${activeItem.marker}${activeItem.seriesName}: ${formatYi(activeItem.data.value)}`,
           `<span style="color:#9fb0d6">${UI_TEXT.detail}</span>`,
           formatDetails(activeItem.data.details),
@@ -275,7 +285,7 @@ function renderChart(period) {
         },
       },
     ],
-  });
+  }, true);
 
   updateNavigationState();
 }
@@ -289,8 +299,10 @@ function renderCurrentPeriod() {
 }
 
 async function loadBalanceSheet(symbol, years = "3") {
+  const requestId = ++activeRequestId;
   const normalizedSymbol = sanitizeSymbolInput(symbol);
   if (normalizedSymbol.length !== 6) {
+    setLoadingState(false);
     renderError(UI_TEXT.invalidSymbol);
     return;
   }
@@ -299,6 +311,7 @@ async function loadBalanceSheet(symbol, years = "3") {
   try {
     normalizedYears = parseYearsInput(years);
   } catch (error) {
+    setLoadingState(false);
     renderError(error.message);
     return;
   }
@@ -315,6 +328,7 @@ async function loadBalanceSheet(symbol, years = "3") {
     const namePromise = fetchStockName(normalizedSymbol);
     const response = await fetch(`/api/stocks/balance-sheet?symbol=${normalizedSymbol}&years=${normalizedYears}`);
     const payload = await response.json();
+    if (requestId !== activeRequestId) return;
 
     if (!response.ok) {
       throw new Error(payload.detail || `${UI_TEXT.requestFailed}: ${response.status}`);
@@ -326,10 +340,12 @@ async function loadBalanceSheet(symbol, years = "3") {
     setLoadingState(false);
 
     namePromise.then((namePayload) => {
+      if (requestId !== activeRequestId) return;
       currentNamePayload = namePayload;
       renderCurrentPeriod();
     });
   } catch (error) {
+    if (requestId !== activeRequestId) return;
     currentPayload = null;
     currentNamePayload = null;
     currentIndex = 0;
@@ -375,4 +391,4 @@ nextButton.addEventListener("click", () => {
 });
 
 window.addEventListener("resize", () => chart.resize());
-loadBalanceSheet(readLastSymbol() || symbolInput.value, yearsInput.value);
+loadBalanceSheet(new URLSearchParams(window.location.search).get("symbol") || readLastSymbol() || symbolInput.value, yearsInput.value);

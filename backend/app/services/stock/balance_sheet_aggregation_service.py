@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from typing import Any
+from math import isfinite
 
 import pandas as pd
 from fastapi import HTTPException
 
 from backend.app.config.balance_groups import BALANCE_GROUPS, EXCLUDED_BALANCE_FIELDS
+from backend.app.providers.balance_sheet.normalization import normalize_balance_sheet
 
 
 REPORT_DATE_COLUMN = "报告日"
@@ -19,13 +21,24 @@ class BalanceSheetAggregationService:
         if years <= 0:
             raise HTTPException(status_code=400, detail="years must be a positive integer")
 
-        cleaned = raw_df.copy()
+        cleaned = normalize_balance_sheet(raw_df)
         if REPORT_DATE_COLUMN not in cleaned.columns:
             raise HTTPException(status_code=500, detail=f"balance sheet data missing {REPORT_DATE_COLUMN} column")
+        known_fields = {"资产总计", "负债合计"} | {
+            matcher["pattern"] for items in BALANCE_GROUPS.values() for item in items for matcher in item["matchers"]
+        }
+        if not known_fields.intersection(cleaned.columns):
+            raise HTTPException(status_code=500, detail="balance sheet data has no recognized amount fields")
 
-        cleaned[REPORT_DATE_COLUMN] = pd.to_datetime(cleaned[REPORT_DATE_COLUMN], errors="coerce")
+        # Integer YYYYMMDD values must not be interpreted as nanoseconds since 1970.
+        cleaned[REPORT_DATE_COLUMN] = pd.to_datetime(cleaned[REPORT_DATE_COLUMN].astype(str), errors="coerce", format="mixed")
+        if "更新日期" in cleaned:
+            cleaned = cleaned.assign(_updated=pd.to_datetime(cleaned["更新日期"], errors="coerce", format="mixed"))
+            cleaned = cleaned.sort_values("_updated", na_position="first", kind="stable")
         cleaned = (
             cleaned.dropna(subset=[REPORT_DATE_COLUMN])
+            .loc[lambda df: df[REPORT_DATE_COLUMN].dt.is_quarter_end]
+            .drop_duplicates(subset=[REPORT_DATE_COLUMN], keep="last")
             .sort_values(REPORT_DATE_COLUMN, ascending=False)
             .reset_index(drop=True)
         )
@@ -41,16 +54,20 @@ class BalanceSheetAggregationService:
         periods: list[dict[str, Any]] = []
         for _, row in cleaned.iterrows():
             record = row.to_dict()
+            assets = self._aggregate_group(record, BALANCE_GROUPS["assets"], "资产总计")
+            liabilities = self._aggregate_group(record, BALANCE_GROUPS["liabilities"], "负债合计")
             periods.append(
                 {
                     "report_date": pd.Timestamp(record[REPORT_DATE_COLUMN]).strftime("%Y-%m-%d"),
-                    "assets": self._aggregate_group(record, BALANCE_GROUPS["assets"]),
-                    "liabilities": self._aggregate_group(record, BALANCE_GROUPS["liabilities"]),
+                    "assets": assets,
+                    "liabilities": liabilities,
+                    "assets_total": self._reported_total(record, "资产总计", assets),
+                    "liabilities_total": self._reported_total(record, "负债合计", liabilities),
                 }
             )
         return periods
 
-    def _aggregate_group(self, record: dict[str, Any], group_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _aggregate_group(self, record: dict[str, Any], group_items: list[dict[str, Any]], total_field: str) -> list[dict[str, Any]]:
         result: list[dict[str, Any]] = []
 
         for item in group_items:
@@ -65,10 +82,12 @@ class BalanceSheetAggregationService:
                     continue
 
                 numeric_value = self._coerce_numeric(raw_value)
-                if numeric_value <= 0:
+                if numeric_value == 0:
                     continue
 
                 included_in_total = bool(matched_rule.get("include_in_total", True))
+                if any(self._has_numeric(record.get(field)) for field in matched_rule.get("fallback_for", ())):
+                    included_in_total = False
                 details.append(
                     {
                         "label": matched_rule.get("detail_label") or str(column),
@@ -98,18 +117,35 @@ class BalanceSheetAggregationService:
                 for candidate in result
                 if candidate["section"] == item["section"] and candidate["key"] != item["key"]
             )
-            total_amount = self._coerce_numeric(record.get(item["residual_of"]))
-            residual_value = max(total_amount - section_sum, item["value"], 0.0)
-            unmatched_value = max(residual_value - item["value"], 0.0)
+            total_amount = record.get(item["residual_of"])
+            if not self._has_numeric(total_amount):
+                continue
+            residual_value = self._coerce_numeric(total_amount) - section_sum
+            unmatched_value = residual_value - item["value"]
             item["value"] = residual_value
-            if unmatched_value > 0:
+            if abs(unmatched_value) > 0.01:
                 item["details"].append(
                     {
-                        "label": UNMATCHED_ITEM_LABEL,
+                        "label": UNMATCHED_ITEM_LABEL if unmatched_value > 0 else "分类与报表差额",
                         "value": self._to_yi(unmatched_value),
                         "included_in_total": True,
                     }
                 )
+
+        # Financial companies may expose only overall totals, without current/non-current subtotals.
+        if self._has_numeric(record.get(total_field)):
+            difference = self._coerce_numeric(record[total_field]) - sum(item["value"] for item in result)
+            if abs(difference) > 0.01:
+                result.append({
+                    "key": "unclassified",
+                    "label": "未分类资产" if total_field == "资产总计" else "未分类负债",
+                    "value": difference,
+                    "details": [{
+                        "label": UNMATCHED_ITEM_LABEL if difference > 0 else "分类与报表差额",
+                        "value": self._to_yi(difference),
+                        "included_in_total": True,
+                    }],
+                })
 
         return [
             {
@@ -133,16 +169,30 @@ class BalanceSheetAggregationService:
         return None
 
     @staticmethod
+    def _has_numeric(value: Any) -> bool:
+        try:
+            return isfinite(float(str(value).strip().replace(",", "")))
+        except (TypeError, ValueError):
+            return False
+
+    @classmethod
+    def _reported_total(cls, record: dict[str, Any], field: str, items: list[dict[str, Any]]) -> float:
+        if cls._has_numeric(record.get(field)):
+            return cls._to_yi(cls._coerce_numeric(record[field]))
+        return round(sum(item["value"] for item in items), 2)
+
+    @staticmethod
     def _coerce_numeric(value: Any) -> float:
         if pd.isna(value):
             return 0.0
         if isinstance(value, (int, float)):
-            return float(value)
+            return float(value) if isfinite(float(value)) else 0.0
         text = str(value).strip().replace(",", "")
         if not text or text in {"--", "nan", "None"}:
             return 0.0
         try:
-            return float(text)
+            number = float(text)
+            return number if isfinite(number) else 0.0
         except ValueError:
             return 0.0
 

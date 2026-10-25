@@ -111,13 +111,26 @@ class StockService:
 
     def get_stock_balance_sheet(self, symbol: str, years: int = 3) -> dict[str, Any]:
         normalized_symbol = self.normalize_symbol(symbol)
-        raw_df = self._fetch_with_failover(normalized_symbol, self.balance_sheet_providers, "balance sheet")
-        periods = self.balance_sheet_aggregation_service.aggregate(raw_df, normalized_symbol, years=years)
+        if years <= 0:
+            raise HTTPException(status_code=400, detail="years must be a positive integer")
+        errors = []
+        for provider in self.balance_sheet_providers:
+            try:
+                raw_df = provider.fetch(normalized_symbol)
+                periods = self.balance_sheet_aggregation_service.aggregate(raw_df, normalized_symbol, years=years)
+                provider_name = provider.source_name
+                break
+            except Exception as exc:
+                logger.exception("Balance sheet provider %s failed for symbol=%s", provider.source_name, normalized_symbol)
+                errors.append(f"{provider.source_name} failed: {exc}")
+        else:
+            raise HTTPException(status_code=502, detail="balance sheet fetch failed. " + " | ".join(errors))
         return {
             "symbol": normalized_symbol,
             "metric": "\u8d44\u4ea7\u8d1f\u503a\u8868",
             "years": years,
             "periods": periods,
+            "provider_summary": {"used_source": provider_name},
         }
 
     @staticmethod
